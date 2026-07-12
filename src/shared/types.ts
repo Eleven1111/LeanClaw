@@ -177,6 +177,7 @@ export interface EvidenceView {
   locator: string
   excerpt: string
   verificationStatus: string
+  snapshotPath: string | null
 }
 
 export interface TaskMetrics {

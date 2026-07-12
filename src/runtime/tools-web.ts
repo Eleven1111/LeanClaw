@@ -1,4 +1,7 @@
 import { ToolError, type ToolDefinition } from './tool-types'
+import { createHash } from 'crypto'
+import { mkdirSync, writeFileSync } from 'fs'
+import { join } from 'path'
 
 const MAX_BODY_BYTES = 2 * 1024 * 1024
 const FETCH_TIMEOUT_MS = 15000
@@ -131,6 +134,18 @@ function isWebMock(): boolean {
   return process.env.LEANCLAW_WEB_MOCK === '1'
 }
 
+export function snapshotFileName(url: string, html: string): string {
+  return createHash('sha256').update(url).update('\0').update(html).digest('hex') + '.html'
+}
+
+function persistSnapshot(url: string, html: string): string {
+  const root = join(process.env.LEANCLAW_DATA_DIR ?? process.cwd(), 'snapshots')
+  mkdirSync(root, { recursive: true })
+  const path = join(root, snapshotFileName(url, html))
+  writeFileSync(path, html, 'utf8')
+  return path
+}
+
 export const webFetchTool: ToolDefinition = {
   id: 'web.fetch',
   name: '抓取网页',
@@ -147,9 +162,10 @@ export const webFetchTool: ToolDefinition = {
     if (isWebMock()) {
       const fixture = MOCK_SOURCES[url]
       if (!fixture) throw new ToolError(`Mock 模式下未知 URL: ${url}`, false)
+      const html = `<!doctype html><html><head><title>${fixture.title}</title></head><body><p>${fixture.text}</p></body></html>`
       return {
         summary: `已获取 ${url}（Mock，${fixture.text.length} 字符）`,
-        data: { title: fixture.title, text: fixture.text, url }
+        data: { title: fixture.title, text: fixture.text, url, snapshotPath: persistSnapshot(url, html) }
       }
     }
     const controller = new AbortController()
@@ -160,7 +176,7 @@ export const webFetchTool: ToolDefinition = {
       const buf = await readBodyCapped(res, MAX_BODY_BYTES)
       const html = buf.toString('utf8')
       const { title, text } = htmlToText(html)
-      return { summary: `已获取 ${url}（${text.length} 字符）`, data: { title, text, url } }
+      return { summary: `已获取 ${url}（${text.length} 字符）`, data: { title, text, url, snapshotPath: persistSnapshot(url, html) } }
     } catch (e) {
       if ((e as Error).name === 'AbortError') {
         throw new ToolError(`请求超时（${FETCH_TIMEOUT_MS}ms）: ${url}`, true)

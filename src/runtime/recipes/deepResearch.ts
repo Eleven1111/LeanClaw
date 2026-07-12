@@ -67,6 +67,7 @@ export const deepResearchRecipe: LoopTemplate = {
           }
           const title = String(res.data?.title ?? fallbackTitle ?? url)
           const text = String(res.data?.text ?? '')
+          const snapshotPath = String(res.data?.snapshotPath ?? '')
           if (text.length < 200) {
             failures.push(`${url}（正文过短，疑似反爬页面）`)
             continue
@@ -75,6 +76,7 @@ export const deepResearchRecipe: LoopTemplate = {
             type: `${SOURCE_TYPE_PREFIX}${saved}`,
             title,
             content: text,
+            localPath: snapshotPath || undefined,
             origin: url,
             mimeType: 'text/plain',
             producer: 'tool:web.fetch',
@@ -143,14 +145,15 @@ export const deepResearchRecipe: LoopTemplate = {
         const parsed = parseReport(draft.content ?? '')
         if (!parsed.ok) return ctx.failVerification('报告无法解析，无法核验引用', GENERATE_IDX)
         const sources = ctx.getArtifacts(SOURCE_TYPE_PREFIX)
-        const textByUrl = new Map(sources.map((s) => [s.origin ?? '', s.content ?? '']))
+        const sourceByUrl = new Map(sources.map((s) => [s.origin ?? '', s]))
         let allOk = true
         parsed.report.citations.forEach((c, i) => {
-          const sourceText = textByUrl.get(c.url) ?? ''
+          const source = sourceByUrl.get(c.url)
+          const sourceText = source?.content ?? ''
           const [result] = checkCitations(sourceText, [c.quote])
           if (!result.found) allOk = false
           ctx.addEvidence({
-            artifactId: draft.id,
+            artifactId: source?.id ?? draft.id,
             sourceType: 'web',
             locator: `${c.url}#quote-${i + 1}`,
             excerpt: c.quote,

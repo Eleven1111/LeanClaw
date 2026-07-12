@@ -515,7 +515,11 @@ export function TaskWorkspace({
                         {e.verificationStatus === 'verified' ? '✓' : '✗'} {e.excerpt}
                       </div>
                       <div className="evidence-source muted">
-                        {isWeb ? (
+                        {e.snapshotPath ? (
+                          <button className="link" onClick={() => void window.api.reveal(e.snapshotPath as string)}>
+                            打开抓取快照
+                          </button>
+                        ) : isWeb ? (
                           <a
                             href="#"
                             onClick={(ev) => {

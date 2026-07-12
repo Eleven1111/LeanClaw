@@ -211,9 +211,10 @@ function getDeliverable(artifactId: string): DeliverableDetailView {
   if (!row) throw new Error('交付物不存在')
   const evidence = getDb()
     .prepare(
-      `SELECT id, source_type as sourceType, locator, excerpt,
-              verification_status as verificationStatus
-       FROM evidence WHERE task_id = ? ORDER BY created_at`
+      `SELECT e.id, e.source_type as sourceType, e.locator, e.excerpt,
+              e.verification_status as verificationStatus, a.local_path as snapshotPath
+       FROM evidence e LEFT JOIN artifacts a ON a.id = e.artifact_id
+       WHERE e.task_id = ? ORDER BY e.created_at`
     )
     .all(row.taskId) as DeliverableDetailView['evidence']
   const content = String(row.content ?? '')

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'fs'
 import { createHash } from 'crypto'
 import { dirname, resolve } from 'path'
 import { unifiedDiff } from '../shared/diff'
@@ -24,8 +24,60 @@ const readFileTool: ToolDefinition = {
   async execute(input) {
     const path = String(input.path ?? '')
     if (!existsSync(path)) throw new ToolError(`输入文件不存在: ${path}`, false)
-    const content = readFileSync(path, 'utf8')
+    const raw = readFileSync(path, 'utf8')
+    const content = path.toLowerCase().endsWith('.csv') ? csvToMarkdown(raw) : raw
     return { summary: `已读取 ${path}（${content.length} 字符）`, data: { content } }
+  }
+}
+
+function parseCsv(content: string): string[][] {
+  const rows: string[][] = []
+  let row: string[] = []
+  let cell = ''
+  let quoted = false
+  for (let i = 0; i < content.length; i++) {
+    const ch = content[i]
+    if (ch === '"') {
+      if (quoted && content[i + 1] === '"') { cell += '"'; i++ } else quoted = !quoted
+    } else if (ch === ',' && !quoted) { row.push(cell); cell = '' }
+    else if ((ch === '\n' || ch === '\r') && !quoted) {
+      if (ch === '\r' && content[i + 1] === '\n') i++
+      row.push(cell); if (row.some((value) => value.length > 0)) rows.push(row)
+      row = []; cell = ''
+    } else cell += ch
+  }
+  if (cell || row.length) { row.push(cell); rows.push(row) }
+  return rows
+}
+
+function csvToMarkdown(content: string): string {
+  const rows = parseCsv(content)
+  if (rows.length === 0) return ''
+  const width = Math.max(...rows.map((row) => row.length))
+  const clean = (value: string): string => value.replace(/\|/g, '\\|').replace(/\s+/g, ' ').trim()
+  const normalized = rows.map((row) => Array.from({ length: width }, (_, i) => clean(row[i] ?? '')))
+  return [normalized[0], Array(width).fill('---'), ...normalized.slice(1)]
+    .map((row) => `| ${row.join(' | ')} |`).join('\n')
+}
+
+const listDirTool: ToolDefinition = {
+  id: 'fs.list',
+  name: '列出目录',
+  version: '1.0.0',
+  provider: 'builtin',
+  description: '列出允许目录的一层文件与子目录，只读动作',
+  baseRisk: 'low',
+  riskFor(input, ctx) {
+    return inAllowedDirs(String(input.path ?? ''), ctx.allowedDirs) ? 'low' : 'forbidden'
+  },
+  async execute(input) {
+    const path = String(input.path ?? '')
+    if (!existsSync(path) || !statSync(path).isDirectory()) throw new ToolError(`目录不存在: ${path}`, false)
+    const entries = readdirSync(path).sort().map((name) => ({
+      name,
+      type: statSync(resolve(path, name)).isDirectory() ? 'directory' : 'file'
+    }))
+    return { summary: `已列出 ${path}（${entries.length} 项）`, data: { entries } }
   }
 }
 
@@ -67,6 +119,7 @@ const writeFileTool: ToolDefinition = {
 
 const registry = new Map<string, ToolDefinition>([
   [readFileTool.id, readFileTool],
+  [listDirTool.id, listDirTool],
   [writeFileTool.id, writeFileTool],
   [webFetchTool.id, webFetchTool],
   [webSearchTool.id, webSearchTool],

@@ -1,4 +1,5 @@
 import { join } from 'path'
+import { existsSync } from 'fs'
 import { getDb, getSamplePath, getWorkspaceDir } from './db'
 import { handleRpc } from './api'
 import { subscribe } from './bus'
@@ -339,13 +340,18 @@ async function runSingleSmoke(): Promise<void> {
 
   const expectFallback = process.env.LEANCLAW_FAULT === 'primary_500'
   const fallbackOk = !expectFallback || (fallbackEvents.c >= 1 && errorCalls === 1 && okCalls >= 1)
+  const snapshotOk =
+    !isDeepResearch ||
+    finalStatus !== 'delivered' ||
+    (view.evidence.length > 0 && view.evidence.every((e) => Boolean(e.snapshotPath && existsSync(e.snapshotPath))))
+  if (isDeepResearch && finalStatus === 'delivered') out(`[snapshots] persisted=${snapshotOk ? view.evidence.length : 0}`)
 
-  if (finalStatus === expect && fallbackOk) {
+  if (finalStatus === expect && fallbackOk && snapshotOk) {
     out(`[smoke] PASS（预期 ${expect}）`)
     process.exit(0)
   }
   out(
-    `[smoke] FAIL（预期 ${expect}，实际 ${finalStatus}${expectFallback ? `，fallbackOk=${fallbackOk}` : ''}）`
+    `[smoke] FAIL（预期 ${expect}，实际 ${finalStatus}${expectFallback ? `，fallbackOk=${fallbackOk}` : ''}，snapshotOk=${snapshotOk}）`
   )
   process.exit(1)
 }

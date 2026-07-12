@@ -140,7 +140,9 @@ export function buildTaskView(taskId: string): TaskView {
       sourceType: e.source_type,
       locator: e.locator,
       excerpt: e.excerpt,
-      verificationStatus: e.verification_status
+      verificationStatus: e.verification_status,
+      snapshotPath:
+        (artifacts.find((a) => a.id === e.artifact_id)?.local_path as string | null | undefined) ?? null
     })),
     metrics: {
       durationMs,

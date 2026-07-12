@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { decodeDdgHref, htmlToText, parseDdgResults } from '../src/runtime/tools-web'
+import { decodeDdgHref, htmlToText, parseDdgResults, snapshotFileName } from '../src/runtime/tools-web'
 
 describe('htmlToText（HTML 转文本）', () => {
   it('提取标题并剥离 script/style 与标签', () => {
@@ -27,6 +27,20 @@ describe('htmlToText（HTML 转文本）', () => {
     const html = '<html><body><p>A &amp; B &lt;tag&gt; &quot;quoted&quot;</p></body></html>'
     const { text } = htmlToText(html)
     expect(text).toContain('A & B <tag> "quoted"')
+  })
+})
+
+describe('snapshotFileName', () => {
+  it('相同 URL 与 HTML 产生稳定且不可逃逸的文件名', () => {
+    const a = snapshotFileName('https://example.com/../../x', '<html>same</html>')
+    const b = snapshotFileName('https://example.com/../../x', '<html>same</html>')
+    expect(a).toBe(b)
+    expect(a).toMatch(/^[a-f0-9]{64}\.html$/)
+    expect(a).not.toContain('/')
+  })
+
+  it('内容变化会改变快照文件名', () => {
+    expect(snapshotFileName('https://example.com', 'a')).not.toBe(snapshotFileName('https://example.com', 'b'))
   })
 })
 

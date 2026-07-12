@@ -126,7 +126,7 @@ export function Deliverables({
                   <ol>
                     {detail.evidence.map((e, index) => {
                       const { source } = parseEvidenceLocator(e.locator)
-                      return <li id={`deliverable-evidence-${index + 1}`} tabIndex={-1} key={e.id}><span>{e.excerpt}</span><small>{source}</small></li>
+                      return <li id={`deliverable-evidence-${index + 1}`} tabIndex={-1} key={e.id}><span>{e.excerpt}</span><small>{source}</small>{e.snapshotPath && <button className="link" onClick={() => void window.api.reveal(e.snapshotPath as string)}>打开抓取快照</button>}</li>
                     })}
                   </ol>
                 </div>
