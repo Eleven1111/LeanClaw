@@ -1,0 +1,425 @@
+import { join } from 'path'
+import { getDb, getSamplePath, getWorkspaceDir } from './db'
+import { handleRpc } from './api'
+import { subscribe } from './bus'
+import { getRuntimeConfig, resolveConfig, setRuntimeConfig } from './config'
+import { getMcpStatus, shutdownAllMcp, syncMcpFromConfig } from './mcp'
+import { getTool } from './tools'
+import { riskForShell } from './tools-shell'
+import { mcpToolId } from '../shared/mcp'
+import type { TaskView } from '../shared/types'
+
+const out = (s: string): void => {
+  process.stdout.write(s + '\n')
+}
+
+export async function runSmoke(): Promise<void> {
+  if (process.env.LEANCLAW_SMOKE_MCP) {
+    await runMcpSmoke()
+    return
+  }
+  if (process.env.LEANCLAW_SMOKE_SHELL) {
+    await runShellSmoke()
+    return
+  }
+  if (process.env.LEANCLAW_SMOKE_REFINE) {
+    await runRefineSmoke()
+    return
+  }
+  if (process.env.LEANCLAW_SMOKE_MULTI) {
+    await runMultiSmoke()
+    return
+  }
+  await runSingleSmoke()
+}
+
+async function runShellSmoke(): Promise<void> {
+  const ctx = { allowedDirs: [getWorkspaceDir()] }
+  const shellTool = getTool('shell.run')
+
+  const allowRisk = shellTool.riskFor({ command: 'echo hi' }, ctx)
+  const denyRisk = shellTool.riskFor({ command: 'ls /' }, ctx)
+  const forbiddenCfg = resolveConfig(undefined, undefined, { shellEnabled: false, shellAllowPrefixes: [] })
+  const forbiddenRisk = riskForShell('ls /', forbiddenCfg.shellEnabled, forbiddenCfg.shellAllowPrefixes)
+  const riskOk = allowRisk === 'low' && denyRisk === 'approval_required' && forbiddenRisk === 'forbidden'
+  out(`[shell-risk] allow=${allowRisk} deny=${denyRisk} forbidden=${forbiddenRisk}`)
+
+  let execOk = false
+  try {
+    const res = await shellTool.execute({ command: 'echo hi' }, ctx)
+    execOk = res.data?.exitCode === 0 && String(res.data?.stdout ?? '').includes('hi')
+    out(`[shell-exec] ${res.summary}`)
+  } catch (e) {
+    out('[smoke-error] ' + (e as Error).message)
+  }
+
+  let failOk = false
+  try {
+    await shellTool.execute({ command: 'exit 3' }, ctx)
+  } catch (e) {
+    const message = (e as Error).message
+    failOk = message.includes('3')
+    out(`[shell-fail] ${message}`)
+  }
+
+  out(
+    `[shell] risk=${riskOk ? 'ok' : 'fail'} exec=${execOk ? 'ok' : 'fail'} fail=${failOk ? 'ok' : 'fail'}`
+  )
+  if (riskOk && execOk && failOk) {
+    out('[smoke] PASS（Shell 工具：三级风险判定正确、白名单执行成功、失败命令正确抛错）')
+    process.exit(0)
+  }
+  out(`[smoke] FAIL（Shell：riskOk=${riskOk} execOk=${execOk} failOk=${failOk}）`)
+  process.exit(1)
+}
+
+async function runMcpSmoke(): Promise<void> {
+  const serverId = 'm1'
+  if (!process.env.LEANCLAW_MCP_SERVERS) {
+    setRuntimeConfig({
+      mcpServers: [
+        {
+          id: serverId,
+          name: 'EchoFixture',
+          command: process.execPath,
+          args: [join(process.cwd(), 'tests/fixtures/mcp-echo-server.cjs')],
+          enabled: true,
+          env: { ELECTRON_RUN_AS_NODE: '1' }
+        }
+      ]
+    })
+  }
+  syncMcpFromConfig()
+
+  const deadline = Date.now() + 10000
+  let connected = getMcpStatus().find((s) => s.state === 'connected')
+  while (!connected && Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 100))
+    connected = getMcpStatus().find((s) => s.state === 'connected')
+  }
+
+  const status = getMcpStatus()
+  const server = status.find((s) => s.id === serverId) ?? status[0]
+  const connectedCount = status.filter((s) => s.state === 'connected').length
+  const echoId = mcpToolId(server?.id ?? serverId, 'echo')
+  const echoTool = server?.tools.find((t) => t.toolId === echoId)
+  const risk = echoTool?.risk ?? 'unknown'
+  const toolCount = server?.tools.length ?? 0
+
+  let echoOk = false
+  if (echoTool && server?.state === 'connected') {
+    try {
+      const res = await getTool(echoId).execute({ text: 'hello-mcp' }, { allowedDirs: [] })
+      echoOk = res.summary.includes('echo: ')
+      out(`[echo] ${res.summary}`)
+    } catch (e) {
+      out('[smoke-error] ' + (e as Error).message)
+    }
+  }
+
+  out(
+    `[mcp] connected=${connectedCount} tools=${toolCount} echo=${echoOk ? 'ok' : 'fail'} risk=${risk}`
+  )
+  await shutdownAllMcp()
+
+  const pass =
+    server?.state === 'connected' &&
+    connectedCount >= 1 &&
+    !!echoTool &&
+    risk === 'approval_required' &&
+    echoOk
+  if (pass) {
+    out('[smoke] PASS（MCP 链路：已连接、echo 工具注册且默认 approval_required、execute 返回 echo:）')
+    process.exit(0)
+  }
+  out(
+    `[smoke] FAIL（MCP：state=${server?.state} connected=${connectedCount} echoTool=${!!echoTool} risk=${risk} echoOk=${echoOk}）`
+  )
+  process.exit(1)
+}
+
+async function runRefineSmoke(): Promise<void> {
+  const inputPath = getSamplePath()
+  const goal = '把这个文件整理成一份带引用的摘要，保存为 Markdown。'
+  const instruction = '在摘要开头加上一句总体结论。'
+  let taskId = ''
+  let refineSent = false
+  let leftDeliveredAfterRefine = false
+  let settle: (v: string) => void = () => undefined
+  const finished = new Promise<string>((r) => {
+    settle = r
+  })
+
+  subscribe(({ task }) => {
+    if (taskId && task.id !== taskId) return
+    void (async () => {
+      try {
+        if (task.status !== 'delivered' && refineSent) leftDeliveredAfterRefine = true
+        if (task.status === 'awaiting_approval') {
+          const appr = task.approvals.find((a) => a.status === 'pending')
+          if (appr) {
+            out(`[approval] 自动批准: ${appr.actionDesc}`)
+            await handleRpc({ method: 'resolveApproval', approvalId: appr.id, decision: 'approved' })
+          }
+        } else if (task.status === 'andon_open') {
+          const andon = task.andons.find((a) => a.status === 'open')
+          if (andon) await handleRpc({ method: 'resolveAndon', andonId: andon.id, action: 'cancel' })
+        } else if (task.status === 'delivered') {
+          if (!refineSent) {
+            refineSent = true
+            out(`[refine] 提交修改指令: ${instruction}`)
+            const id = task.id
+            setTimeout(() => {
+              void handleRpc({ method: 'refineTask', taskId: id, instruction }).catch((e) => {
+                out('[smoke-error] ' + (e as Error).message)
+                settle('smoke-error')
+              })
+            }, 0)
+          } else if (leftDeliveredAfterRefine) {
+            settle('delivered')
+          }
+        } else if (['cancelled_by_user', 'verification_failed', 'failed'].includes(task.status)) {
+          settle(task.status)
+        }
+      } catch (e) {
+        out('[smoke-error] ' + (e as Error).message)
+        settle('smoke-error')
+      }
+    })()
+  })
+
+  const created = (await handleRpc({
+    method: 'createTask',
+    goal,
+    inputPath,
+    recipeId: 'file-edit-summarize'
+  })) as TaskView
+  taskId = created.id
+  out(`[task] created ${created.id}`)
+  await handleRpc({ method: 'startTask', taskId: created.id })
+
+  const timeout = new Promise<string>((r) => setTimeout(() => r('timeout'), 60000))
+  const finalStatus = await Promise.race([finished, timeout])
+
+  const db = getDb()
+  const arts = db
+    .prepare(
+      `SELECT version, superseded_by, content FROM artifacts
+       WHERE task_id = ? AND type = 'deliverable' ORDER BY version`
+    )
+    .all(taskId) as { version: number; superseded_by: string | null; content: string | null }[]
+  const latest = arts[arts.length - 1]
+  const apprs = db
+    .prepare('SELECT status FROM approvals WHERE task_id = ?')
+    .all(taskId) as { status: string }[]
+  const supersededCount = apprs.filter((a) => a.status === 'superseded').length
+  const v2ok = latest !== undefined && latest.version === 2
+  const oldSuperseded = arts.length >= 2 && arts[0].superseded_by !== null
+  const contentUpdated = String(latest?.content ?? '').includes('已按修改要求调整')
+  const apprTotal = apprs.length
+
+  out(
+    `[final] status=${finalStatus} deliverables=${arts.length} approvals=${apprTotal} superseded=${supersededCount}`
+  )
+  out(
+    `[refine] v2 delivered, approvals=${apprTotal}(${supersededCount} superseded), content-updated=${contentUpdated}`
+  )
+  const pass =
+    finalStatus === 'delivered' &&
+    v2ok &&
+    oldSuperseded &&
+    apprTotal === 2 &&
+    supersededCount === 1 &&
+    contentUpdated
+  if (pass) {
+    out('[smoke] PASS（增量 Run：v2 交付、旧版被取代、第二轮产生新批准、内容已更新）')
+    process.exit(0)
+  }
+  out(
+    `[smoke] FAIL（增量 Run：status=${finalStatus} v2ok=${v2ok} oldSuperseded=${oldSuperseded} ` +
+      `apprTotal=${apprTotal} superseded=${supersededCount} contentUpdated=${contentUpdated}）`
+  )
+  process.exit(1)
+}
+
+async function runSingleSmoke(): Promise<void> {
+  const expect = process.env.LEANCLAW_SMOKE_EXPECT || 'delivered'
+  const budgetEnv = process.env.LEANCLAW_SMOKE_BUDGET
+  const budgetUsd = budgetEnv !== undefined ? Number(budgetEnv) : undefined
+  const defaultRecipe = budgetUsd !== undefined ? 'content-pack' : 'file-edit-summarize'
+  const recipeId = process.env.LEANCLAW_SMOKE_RECIPE || defaultRecipe
+  const isDeepResearch = recipeId === 'deep-research'
+  const isContentPack = recipeId === 'content-pack'
+  const inputPath = isDeepResearch ? '' : process.env.LEANCLAW_SMOKE_INPUT || getSamplePath()
+  const goal = isDeepResearch
+    ? '研究 AI Agent 桌面应用的最新发展，输出带引用的分析报告。'
+    : isContentPack
+      ? '基于这份素材写一篇适合发布的文章。'
+      : '把这个文件整理成一份带引用的摘要，保存为 Markdown。'
+  let lastStatus = ''
+  let retriedOnce = false
+  let settle: (v: string) => void = () => undefined
+  const finished = new Promise<string>((r) => {
+    settle = r
+  })
+
+  subscribe(({ task }) => {
+    if (task.status !== lastStatus) {
+      lastStatus = task.status
+      out(`[status] ${task.status} (${task.userStatus})`)
+    }
+    void (async () => {
+      try {
+        if (task.status === 'awaiting_approval') {
+          const appr = task.approvals.find((a) => a.status === 'pending')
+          if (appr) {
+            out(`[approval] 自动批准: ${appr.actionDesc}`)
+            await handleRpc({ method: 'resolveApproval', approvalId: appr.id, decision: 'approved' })
+          }
+        } else if (task.status === 'andon_open') {
+          const andon = task.andons.find((a) => a.status === 'open')
+          if (!andon) return
+          out(`[andon] ${andon.reason}`)
+          if (expect === 'delivered' && !retriedOnce && andon.recommendedActions.includes('retry')) {
+            retriedOnce = true
+            await handleRpc({ method: 'resolveAndon', andonId: andon.id, action: 'retry' })
+          } else {
+            await handleRpc({ method: 'resolveAndon', andonId: andon.id, action: 'cancel' })
+          }
+        } else if (
+          ['delivered', 'verification_failed', 'cancelled_by_user', 'failed'].includes(task.status)
+        ) {
+          settle(task.status)
+        }
+      } catch (e) {
+        out('[smoke-error] ' + (e as Error).message)
+        settle('smoke-error')
+      }
+    })()
+  })
+
+  const created = (await handleRpc({
+    method: 'createTask',
+    goal,
+    inputPath,
+    recipeId,
+    ...(budgetUsd !== undefined ? { budgetUsd } : {})
+  })) as TaskView
+  out(`[task] created ${created.id}`)
+  out(`[input] ${inputPath}`)
+  await handleRpc({ method: 'startTask', taskId: created.id })
+
+  const timeout = new Promise<string>((r) => setTimeout(() => r('timeout'), 60000))
+  const finalStatus = await Promise.race([finished, timeout])
+  const view = (await handleRpc({ method: 'getTask', taskId: created.id })) as TaskView
+  const events = getDb()
+    .prepare('SELECT COUNT(*) c FROM run_events WHERE task_id = ?')
+    .get(created.id) as { c: number }
+  out(
+    `[final] status=${finalStatus} artifacts=${view.artifacts.length} verifications=${view.verifications.length} ` +
+      `evidence=${view.evidence.length} approvals=${view.approvals.length} andons=${view.andons.length} ` +
+      `events=${events.c} retries=${view.metrics.retries} cost=$${view.metrics.costUsd.toFixed(4)}`
+  )
+  const deliverable = view.artifacts.find((a) => a.isDeliverable)
+  if (deliverable?.localPath) out(`[deliverable] ${deliverable.localPath}`)
+
+  const fallbackEvents = getDb()
+    .prepare(`SELECT COUNT(*) c FROM run_events WHERE task_id = ? AND type = 'model-fallback'`)
+    .get(created.id) as { c: number }
+  const modelCallStats = getDb()
+    .prepare(
+      `SELECT status, COUNT(*) c FROM model_calls
+       WHERE step_id IN (SELECT s.id FROM steps s JOIN runs r ON s.run_id = r.id WHERE r.task_id = ?)
+       GROUP BY status`
+    )
+    .all(created.id) as { status: string; c: number }[]
+  const errorCalls = modelCallStats.find((s) => s.status === 'error')?.c ?? 0
+  const okCalls = modelCallStats.find((s) => s.status === 'ok')?.c ?? 0
+  out(`[fallback] event=${fallbackEvents.c} error-call=${errorCalls} ok-call=${okCalls}`)
+
+  const expectFallback = process.env.LEANCLAW_FAULT === 'primary_500'
+  const fallbackOk = !expectFallback || (fallbackEvents.c >= 1 && errorCalls === 1 && okCalls >= 1)
+
+  if (finalStatus === expect && fallbackOk) {
+    out(`[smoke] PASS（预期 ${expect}）`)
+    process.exit(0)
+  }
+  out(
+    `[smoke] FAIL（预期 ${expect}，实际 ${finalStatus}${expectFallback ? `，fallbackOk=${fallbackOk}` : ''}）`
+  )
+  process.exit(1)
+}
+
+const MULTI_ACTIVE_STATUSES = new Set(['step_running', 'step_retrying', 'verifying'])
+const MULTI_TERMINAL_STATUSES = new Set(['delivered', 'verification_failed', 'cancelled_by_user', 'failed'])
+
+async function runMultiSmoke(): Promise<void> {
+  const n = Math.max(1, parseInt(process.env.LEANCLAW_SMOKE_MULTI || '5', 10) || 5)
+  const recipeId = process.env.LEANCLAW_SMOKE_RECIPE || 'file-edit-summarize'
+  const inputPath = getSamplePath()
+  const goal = '把这个文件整理成一份带引用的摘要，保存为 Markdown。'
+  const maxActive = getRuntimeConfig().maxActiveTasks
+
+  const ids = new Set<string>()
+  const statuses = new Map<string, string>()
+  const settled = new Set<string>()
+  const delivered = new Set<string>()
+  let peak = 0
+  let settle: () => void = () => undefined
+  const finished = new Promise<void>((r) => {
+    settle = r
+  })
+
+  subscribe(({ task }) => {
+    if (!ids.has(task.id)) return
+    statuses.set(task.id, task.status)
+    const activeCount = [...statuses.values()].filter((s) => MULTI_ACTIVE_STATUSES.has(s)).length
+    peak = Math.max(peak, activeCount)
+    void (async () => {
+      try {
+        if (task.status === 'awaiting_approval') {
+          const appr = task.approvals.find((a) => a.status === 'pending')
+          if (appr) await handleRpc({ method: 'resolveApproval', approvalId: appr.id, decision: 'approved' })
+        } else if (task.status === 'andon_open') {
+          const andon = task.andons.find((a) => a.status === 'open')
+          if (andon) {
+            const action = andon.recommendedActions.includes('retry') ? 'retry' : 'cancel'
+            await handleRpc({ method: 'resolveAndon', andonId: andon.id, action })
+          }
+        } else if (MULTI_TERMINAL_STATUSES.has(task.status) && !settled.has(task.id)) {
+          settled.add(task.id)
+          if (task.status === 'delivered') delivered.add(task.id)
+          if (settled.size === n) settle()
+        }
+      } catch (e) {
+        out('[smoke-error] ' + (e as Error).message)
+        if (!settled.has(task.id)) {
+          settled.add(task.id)
+          if (settled.size === n) settle()
+        }
+      }
+    })()
+  })
+
+  const createdIds: string[] = []
+  for (let i = 0; i < n; i++) {
+    const t = (await handleRpc({ method: 'createTask', goal, inputPath, recipeId })) as TaskView
+    ids.add(t.id)
+    createdIds.push(t.id)
+  }
+  out(`[multi] created ${createdIds.length} tasks, maxActive=${maxActive}`)
+  for (const id of createdIds) {
+    await handleRpc({ method: 'startTask', taskId: id })
+  }
+
+  const timeout = new Promise<void>((r) => setTimeout(() => r(), 90000))
+  await Promise.race([finished, timeout])
+
+  out(`[multi] peak=${peak} delivered=${delivered.size}`)
+  if (peak <= maxActive && delivered.size === n) {
+    out(`[smoke] PASS（并发排队：peak=${peak} ≤ maxActive=${maxActive}，${delivered.size}/${n} 全部交付）`)
+    process.exit(0)
+  }
+  out(`[smoke] FAIL（并发排队：peak=${peak}，delivered=${delivered.size}/${n}）`)
+  process.exit(1)
+}

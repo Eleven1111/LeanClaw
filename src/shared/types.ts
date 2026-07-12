@@ -1,0 +1,353 @@
+export type InternalStatus =
+  | 'draft'
+  | 'planning'
+  | 'queued'
+  | 'step_running'
+  | 'step_retrying'
+  | 'paused_by_user'
+  | 'awaiting_approval'
+  | 'andon_open'
+  | 'verifying'
+  | 'verification_failed'
+  | 'delivered'
+  | 'cancelled_by_user'
+  | 'failed'
+  | 'archived'
+
+export type UserStatus =
+  | 'Draft'
+  | 'Planning'
+  | 'Running'
+  | 'Waiting for You'
+  | 'Verifying'
+  | 'Delivered'
+  | 'Blocked'
+  | 'Cancelled'
+  | 'Archived'
+
+export type ProviderKind = 'anthropic' | 'openai-compat'
+
+export interface ProviderView {
+  id: string
+  name: string
+  kind: ProviderKind
+  baseUrl: string
+  defaultModel: string
+  inputPricePerM: number | null
+  outputPricePerM: number | null
+  hasKey: boolean
+}
+
+export interface ProvidersView {
+  providers: ProviderView[]
+  defaultProviderId: string | null
+}
+
+export interface ProviderUpsertInput {
+  id?: string
+  name: string
+  kind: ProviderKind
+  baseUrl: string
+  defaultModel: string
+  inputPricePerM?: number | null
+  outputPricePerM?: number | null
+}
+
+export interface TestProviderResult {
+  ok: boolean
+  message: string
+}
+
+export type RiskLevel = 'low' | 'approval_required' | 'forbidden'
+
+export interface McpServerView {
+  id: string
+  name: string
+  command: string
+  args: string[]
+  enabled: boolean
+  envKeys: string[]
+}
+
+export interface McpServerUpsertInput {
+  id?: string
+  name: string
+  command: string
+  args: string[]
+  enabled: boolean
+  env?: Record<string, string> | null
+}
+
+export type McpServerState = 'connected' | 'connecting' | 'error' | 'disabled'
+
+export interface McpToolStatus {
+  toolId: string
+  name: string
+  description: string
+  risk: RiskLevel
+}
+
+export interface McpServerStatus {
+  id: string
+  name: string
+  enabled: boolean
+  state: McpServerState
+  error?: string
+  tools: McpToolStatus[]
+}
+
+export interface SetMcpToolRiskInput {
+  toolId: string
+  risk: RiskLevel
+}
+
+export type StepKind = 'tool' | 'model' | 'verify' | 'deliver'
+export type ModelTier = 'planning' | 'generation' | 'extraction' | 'review'
+
+export interface TierRouteView {
+  providerId: string
+  model: string
+  fallback?: { providerId: string; model: string }
+}
+
+export type TierMapView = Partial<Record<ModelTier, TierRouteView>>
+
+export interface SetTierRouteInput {
+  tier: ModelTier
+  providerId: string
+  model: string
+  fallback?: { providerId: string; model: string } | null
+}
+export type StepStatus = 'pending' | 'running' | 'done' | 'failed'
+export type VerificationKind = 'schema' | 'deterministic' | 'evidence'
+export type VerificationStatus = 'passed' | 'failed'
+
+export interface StepView {
+  id: string
+  idx: number
+  name: string
+  title: string
+  kind: StepKind
+  status: StepStatus
+  attempt: number
+  outputSummary: string | null
+}
+
+export interface ApprovalView {
+  id: string
+  stepId: string
+  actionDesc: string
+  diff: string
+  status: 'pending' | 'approved' | 'rejected' | 'superseded'
+}
+
+export interface AndonView {
+  id: string
+  stepId: string | null
+  reason: string
+  impact: string
+  recommendedActions: string[]
+  status: 'open' | 'resolved'
+}
+
+export interface ArtifactView {
+  id: string
+  type: string
+  title: string
+  version: number
+  contentPreview: string
+  localPath: string | null
+  origin: string | null
+  isDeliverable: boolean
+  verificationStatus: string
+  createdAt: string
+}
+
+export interface VerificationView {
+  id: string
+  stepId: string
+  kind: VerificationKind
+  status: VerificationStatus
+  detail: string
+}
+
+export interface EvidenceView {
+  id: string
+  sourceType: string
+  locator: string
+  excerpt: string
+  verificationStatus: string
+}
+
+export interface TaskMetrics {
+  durationMs: number
+  modelCalls: number
+  toolCalls: number
+  retries: number
+  interventions: number
+  tokensIn: number
+  tokensOut: number
+  costUsd: number
+  eventCount: number
+}
+
+export interface TaskView {
+  id: string
+  goal: string
+  brief: string | null
+  inputPath: string
+  status: InternalStatus
+  userStatus: UserStatus
+  recipeId: string
+  budgetUsd: number | null
+  refineInstructions: string[]
+  queuePosition: number | null
+  steps: StepView[]
+  approvals: ApprovalView[]
+  andons: AndonView[]
+  artifacts: ArtifactView[]
+  verifications: VerificationView[]
+  evidence: EvidenceView[]
+  metrics: TaskMetrics
+  createdAt: string
+  updatedAt: string
+}
+
+export interface RecipeView {
+  id: string
+  title: string
+  goal: string
+  requiresInput: boolean
+  stepCount: number
+  verifyCount: number
+}
+
+export interface PresetView {
+  id: string
+  name: string
+  goal: string
+  recipeId: string
+  recipeTitle: string
+  inputPath: string
+  invalid: boolean
+  createdAt: string
+}
+
+export interface DeliverableView {
+  id: string
+  title: string
+  taskId: string
+  taskGoal: string
+  localPath: string | null
+  contentPreview: string
+  verificationStatus: string
+  createdAt: string
+}
+
+export interface RunToolCallDetail {
+  id: string
+  toolId: string
+  toolVersion: string
+  status: string
+  riskLevel: RiskLevel
+  retryCount: number
+  outputSummary: string | null
+  error: string | null
+  startedAt: string
+  endedAt: string | null
+}
+
+export interface RunModelCallDetail {
+  id: string
+  model: string
+  tokensIn: number | null
+  tokensOut: number | null
+  costUsd: number | null
+  status: string
+  error: string | null
+  createdAt: string
+}
+
+export interface RunVerificationDetail {
+  id: string
+  kind: VerificationKind
+  status: VerificationStatus
+  detail: string
+}
+
+export interface RunStepDetail {
+  id: string
+  idx: number
+  name: string
+  title: string
+  kind: StepKind
+  status: StepStatus
+  attempt: number
+  outputSummary: string | null
+  startedAt: string | null
+  endedAt: string | null
+  toolCalls: RunToolCallDetail[]
+  modelCalls: RunModelCallDetail[]
+  verifications: RunVerificationDetail[]
+}
+
+export interface RunEventDetail {
+  seq: number
+  type: string
+  stepId: string | null
+  payload: string | null
+  createdAt: string
+}
+
+export interface RunDetailView {
+  runId: string
+  taskId: string
+  recipeId: string
+  status: string
+  startedAt: string | null
+  endedAt: string | null
+  currentStepIndex: number
+  steps: RunStepDetail[]
+  events: RunEventDetail[]
+}
+
+export type RpcRequest =
+  | { method: 'listTasks' }
+  | { method: 'getTask'; taskId: string }
+  | { method: 'createTask'; goal: string; inputPath: string; recipeId?: string; budgetUsd?: number }
+  | { method: 'startTask'; taskId: string }
+  | { method: 'pauseTask'; taskId: string }
+  | { method: 'resumeTask'; taskId: string }
+  | { method: 'stopTask'; taskId: string }
+  | { method: 'resolveApproval'; approvalId: string; decision: 'approved' | 'rejected' }
+  | { method: 'resolveAndon'; andonId: string; action: 'retry' | 'cancel' }
+  | { method: 'retryFromCheckpoint'; taskId: string }
+  | { method: 'getDefaults' }
+  | { method: 'listRecipes' }
+  | { method: 'updateBrief'; taskId: string; brief: string }
+  | { method: 'refineTask'; taskId: string; instruction: string }
+  | { method: 'listDeliverables' }
+  | { method: 'getRunDetail'; taskId: string }
+  | { method: 'savePreset'; name: string; goal: string; recipeId: string; inputPath: string }
+  | { method: 'listPresets' }
+  | { method: 'deletePreset'; presetId: string }
+  | { method: 'updateBudget'; taskId: string; budgetUsd: number }
+  | { method: 'archiveTask'; taskId: string }
+  | { method: 'archiveAllDelivered' }
+  | { method: 'testProvider'; providerId: string }
+  | { method: 'mcpStatus' }
+
+export interface PushEvent {
+  type: 'task'
+  task: TaskView
+}
+
+export interface SettingsView {
+  hasApiKey: boolean
+  model: string
+  encryptionAvailable: boolean
+  maxActiveTasks: number
+  defaultBudgetUsd: number
+  shellEnabled: boolean
+  shellAllowPrefixes: string[]
+}
