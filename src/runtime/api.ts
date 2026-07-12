@@ -11,6 +11,7 @@ import { fileEditRecipe, getRecipe, listRecipes } from './recipe'
 import { parseRefineInstructions, validatePresetInput } from '../shared/verify'
 import type {
   DeliverableView,
+  DeliverableDetailView,
   InternalStatus,
   PresetView,
   RecipeView,
@@ -73,6 +74,8 @@ export async function handleRpc(req: RpcRequest): Promise<unknown> {
       return refineTask(req.taskId, req.instruction)
     case 'listDeliverables':
       return listDeliverables()
+    case 'getDeliverable':
+      return getDeliverable(req.artifactId)
     case 'getRunDetail':
       return getRunDetail(req.taskId)
     case 'savePreset':
@@ -177,6 +180,37 @@ function listDeliverables(): DeliverableView[] {
     verificationStatus: r.verificationStatus,
     createdAt: r.createdAt
   }))
+}
+
+function getDeliverable(artifactId: string): DeliverableDetailView {
+  const row = getDb()
+    .prepare(
+      `SELECT a.id, a.title, a.task_id as taskId, t.goal as taskGoal,
+              a.local_path as localPath, a.content, a.verification_status as verificationStatus,
+              a.created_at as createdAt
+       FROM artifacts a JOIN tasks t ON a.task_id = t.id
+       WHERE a.id = ? AND a.is_deliverable = 1`
+    )
+    .get(artifactId) as {
+    id: string
+    title: string
+    taskId: string
+    taskGoal: string
+    localPath: string | null
+    content: string | null
+    verificationStatus: string
+    createdAt: string
+  } | undefined
+  if (!row) throw new Error('交付物不存在')
+  const evidence = getDb()
+    .prepare(
+      `SELECT id, source_type as sourceType, locator, excerpt,
+              verification_status as verificationStatus
+       FROM evidence WHERE task_id = ? ORDER BY created_at`
+    )
+    .all(row.taskId) as DeliverableDetailView['evidence']
+  const content = String(row.content ?? '')
+  return { ...row, content, contentPreview: content.slice(0, 500), evidence }
 }
 
 function toPresetView(row: {

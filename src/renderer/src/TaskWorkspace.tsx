@@ -1,6 +1,7 @@
-import { useState } from 'react'
-import type { InternalStatus, RpcRequest, TaskView, UserStatus } from '../../shared/types'
+import { useEffect, useState } from 'react'
+import type { DeliverableDetailView, InternalStatus, RpcRequest, TaskView, UserStatus } from '../../shared/types'
 import { parseEvidenceLocator } from '../../shared/verify'
+import { RichDeliverablePreview } from './RichDeliverablePreview'
 
 const BRIEF_EDITABLE_STATUSES: InternalStatus[] = [
   'draft',
@@ -70,6 +71,7 @@ export function TaskWorkspace({
   const [refineInput, setRefineInput] = useState('')
   const [refineBusy, setRefineBusy] = useState(false)
   const [refineError, setRefineError] = useState('')
+  const [deliverableDetail, setDeliverableDetail] = useState<DeliverableDetailView | null>(null)
   const exec = (req: RpcRequest): void => {
     setError('')
     window.api.rpc(req).catch((e: Error) => setError(e.message))
@@ -111,7 +113,9 @@ export function TaskWorkspace({
 
   const pendingApproval = task.approvals.find((a) => a.status === 'pending')
   const openAndon = task.andons.find((a) => a.status === 'open')
-  const deliverable = task.artifacts.find((a) => a.isDeliverable)
+  const deliverable = task.artifacts
+    .filter((a) => a.isDeliverable)
+    .sort((a, b) => b.version - a.version)[0]
   const failedVerifications = task.verifications.filter((v) => v.status === 'failed')
   const briefEditable = BRIEF_EDITABLE_STATUSES.includes(task.status)
   const verifiedEvidenceCount = task.evidence.filter((e) => e.verificationStatus === 'verified').length
@@ -122,6 +126,15 @@ export function TaskWorkspace({
   const budgetNearLimit =
     task.budgetUsd !== null && task.budgetUsd > 0 && task.metrics.costUsd / task.budgetUsd >= 0.8
   const isBudgetAndon = Boolean(openAndon && openAndon.reason.includes('预算'))
+
+  useEffect(() => {
+    if (!deliverable) {
+      setDeliverableDetail(null)
+      return
+    }
+    void window.api.rpc({ method: 'getDeliverable', artifactId: deliverable.id })
+      .then((result) => setDeliverableDetail(result as DeliverableDetailView))
+  }, [deliverable?.id])
 
   const openPresetForm = (): void => {
     setPresetName(task.goal.slice(0, 30))
@@ -376,7 +389,12 @@ export function TaskWorkspace({
                   </button>
                 )}
               </div>
-              <pre className="preview">{deliverable.contentPreview}</pre>
+              <RichDeliverablePreview
+                content={deliverableDetail?.content ?? deliverable.contentPreview}
+                onCitation={(index) => {
+                  document.getElementById(`evidence-${index}`)?.scrollIntoView({ behavior: 'smooth' })
+                }}
+              />
               {CITATION_MARKER.test(deliverable.contentPreview) && (
                 <div
                   className="hint-bar"
@@ -489,6 +507,8 @@ export function TaskWorkspace({
                   return (
                     <li
                       key={e.id}
+                      id={`evidence-${task.evidence.indexOf(e) + 1}`}
+                      tabIndex={-1}
                       className={`evidence-item ${e.verificationStatus === 'verified' ? 'passed' : 'failed'}`}
                     >
                       <div className="evidence-excerpt">

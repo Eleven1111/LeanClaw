@@ -1,6 +1,8 @@
 import {
   app,
   BrowserWindow,
+  clipboard,
+  dialog,
   globalShortcut,
   ipcMain,
   Menu,
@@ -11,7 +13,9 @@ import {
   utilityProcess
 } from 'electron'
 import type { UtilityProcess } from 'electron'
+import { writeFile } from 'fs/promises'
 import { join } from 'path'
+import { suggestedExportName } from '../shared/markdown'
 import type {
   McpServerUpsertInput,
   ModelTier,
@@ -226,6 +230,8 @@ function createWindow(): void {
       nodeIntegration: false
     }
   })
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  win.webContents.on('will-navigate', (event) => event.preventDefault())
   if (process.env.ELECTRON_RENDERER_URL) {
     void win.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {
@@ -248,6 +254,33 @@ void app.whenReady().then(() => {
       throw new Error('仅允许打开 http/https 链接')
     }
     return shell.openExternal(url)
+  })
+  ipcMain.handle('copy-deliverable', async (event, artifactId: string) => {
+    if (event.sender !== win?.webContents || typeof artifactId !== 'string') throw new Error('无效的复制请求')
+    const detail = await rpc({ method: 'getDeliverable', artifactId }) as { content: string }
+    clipboard.writeText(detail.content)
+  })
+  ipcMain.handle('save-deliverable', async (event, artifactId: string, title: string) => {
+    if (event.sender !== win?.webContents || typeof artifactId !== 'string') throw new Error('无效的导出请求')
+    const detail = await rpc({ method: 'getDeliverable', artifactId }) as { content: string }
+    const result = await dialog.showSaveDialog(win, {
+      defaultPath: suggestedExportName(String(title), 'md'),
+      filters: [{ name: 'Markdown', extensions: ['md'] }]
+    })
+    if (result.canceled || !result.filePath) return { cancelled: true }
+    await writeFile(result.filePath, detail.content, 'utf8')
+    return { cancelled: false }
+  })
+  ipcMain.handle('export-deliverable-pdf', async (event, title: string) => {
+    if (event.sender !== win?.webContents) throw new Error('无效的 PDF 导出请求')
+    const result = await dialog.showSaveDialog(win, {
+      defaultPath: suggestedExportName(String(title), 'pdf'),
+      filters: [{ name: 'PDF', extensions: ['pdf'] }]
+    })
+    if (result.canceled || !result.filePath) return { cancelled: true }
+    const pdf = await event.sender.printToPDF({ printBackground: true, pageSize: 'A4' })
+    await writeFile(result.filePath, pdf)
+    return { cancelled: false }
   })
   ipcMain.handle('settings-get', () => getSettings())
   ipcMain.handle('settings-set-key', (_event, key: string) => {

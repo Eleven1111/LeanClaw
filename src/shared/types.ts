@@ -244,6 +244,11 @@ export interface DeliverableView {
   createdAt: string
 }
 
+export interface DeliverableDetailView extends DeliverableView {
+  content: string
+  evidence: EvidenceView[]
+}
+
 export interface RunToolCallDetail {
   id: string
   toolId: string
@@ -327,6 +332,7 @@ export type RpcRequest =
   | { method: 'updateBrief'; taskId: string; brief: string }
   | { method: 'refineTask'; taskId: string; instruction: string }
   | { method: 'listDeliverables' }
+  | { method: 'getDeliverable'; artifactId: string }
   | { method: 'getRunDetail'; taskId: string }
   | { method: 'savePreset'; name: string; goal: string; recipeId: string; inputPath: string }
   | { method: 'listPresets' }

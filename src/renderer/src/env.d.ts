@@ -21,6 +21,9 @@ declare global {
       rpc(req: RpcRequest): Promise<unknown>
       reveal(path: string): Promise<void>
       openExternal(url: string): Promise<void>
+      copyDeliverable(artifactId: string): Promise<void>
+      saveDeliverable(artifactId: string, title: string): Promise<{ cancelled: boolean }>
+      exportDeliverablePdf(title: string): Promise<{ cancelled: boolean }>
       getPathForFile(file: File): string
       onPush(cb: (e: PushEvent) => void): () => void
       getSettings(): Promise<SettingsView>

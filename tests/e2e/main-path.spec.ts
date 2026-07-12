@@ -26,7 +26,16 @@ test('主路径：启动任务 → 批准写入 → 交付 → Tasks 归档', as
   await window.getByRole('button', { name: '批准' }).click()
 
   await expect(window.locator('.chip-green', { hasText: 'Delivered' })).toBeVisible({ timeout: 30000 })
-  await expect(window.locator('pre.preview')).toContainText('# ')
+  await expect(window.locator('.markdown-preview h1')).toBeVisible()
+
+  await window.getByRole('button', { name: 'Deliverables' }).click()
+  await window.locator('.grid-card').first().click()
+  await expect(window.locator('.deliverable-preview .markdown-preview h1')).toBeVisible()
+  await expect(window.getByRole('button', { name: '复制' })).toBeEnabled()
+  await expect(window.getByRole('button', { name: '另存为' })).toBeEnabled()
+  await expect(window.getByRole('button', { name: '导出 PDF' })).toBeEnabled()
+  await window.getByRole('button', { name: '复制' }).click()
+  await expect(window.getByRole('status')).toHaveText('已复制全文')
 
   await window.getByRole('button', { name: 'Tasks' }).click()
   await window.locator('.filter-chip', { hasText: 'Delivered' }).click()
