@@ -9,6 +9,7 @@ import { callModel } from './model'
 import { getRecipe, type StepContext } from './recipe'
 import { requestRun } from './scheduler'
 import { parseRefineInstructions } from '../shared/verify'
+import { applyProjectInstructions } from '../shared/project'
 import type { ModelTier } from '../shared/types'
 
 const MAX_ATTEMPTS = 3
@@ -29,6 +30,7 @@ interface TaskRow {
   recipe_id: string
   status: string
   refine_instructions?: string | null
+  project_instructions_snapshot?: string | null
 }
 
 export interface RunRow {
@@ -303,7 +305,11 @@ function makeCtx(task: TaskRow, run: RunRow, step: StepRow, tpl: { tier?: ModelT
           throw new Suspend()
         }
       }
-      const r = await callModel(step.id, prompt, tpl.tier)
+      const r = await callModel(
+        step.id,
+        applyProjectInstructions(prompt, task.project_instructions_snapshot),
+        tpl.tier
+      )
       if (r.fallback) {
         appendEvent(task.id, 'model-fallback', r.fallback, run.id, step.id)
       }

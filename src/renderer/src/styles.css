@@ -805,6 +805,14 @@ button.link {
   flex: 1;
 }
 
+.project-form { display: grid; gap: 10px; margin-bottom: 18px; }
+.project-layout { display: grid; grid-template-columns: minmax(220px, 0.8fr) minmax(0, 1.6fr); gap: 16px; align-items: start; }
+.project-list { display: grid; gap: 10px; }
+.project-list .grid-card { width: 100%; }
+.project-detail { min-height: 240px; }
+.project-detail pre { background: var(--bg); border-radius: 8px; padding: 12px; user-select: text; white-space: pre-wrap; }
+.project-detail .task-row { width: 100%; }
+
 .budget-input {
   width: auto;
   flex: 0 0 160px;

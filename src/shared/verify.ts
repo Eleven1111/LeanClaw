@@ -334,6 +334,21 @@ export function parseRefineInstructions(raw: string | null): string[] {
   }
 }
 
+export type ProjectValidationResult = { ok: true } | { ok: false; detail: string }
+
+export function validateProjectInput(
+  name: string,
+  description: string,
+  savedInstructions: string
+): ProjectValidationResult {
+  const trimmed = name.trim()
+  if (!trimmed) return { ok: false, detail: '项目名称不能为空' }
+  if (trimmed.length > 80) return { ok: false, detail: '项目名称不能超过 80 字符' }
+  if (description.length > 2000) return { ok: false, detail: '项目说明不能超过 2000 字符' }
+  if (savedInstructions.length > 4000) return { ok: false, detail: '固定要求不能超过 4000 字符' }
+  return { ok: true }
+}
+
 export interface CitationResult {
   quote: string
   found: boolean

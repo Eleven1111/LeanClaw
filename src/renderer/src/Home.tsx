@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { RecipeView, TaskView } from '../../shared/types'
+import type { ProjectView, RecipeView, TaskView } from '../../shared/types'
 import { StatusChip } from './TaskWorkspace'
 
 const DEFAULT_RECIPE_ID = 'file-edit-summarize'
@@ -44,6 +44,8 @@ export function Home({
   const [recipes, setRecipes] = useState<RecipeView[]>([])
   const [recipeId, setRecipeId] = useState(initialPreset?.recipeId ?? DEFAULT_RECIPE_ID)
   const [sampleGoal, setSampleGoal] = useState('')
+  const [projects, setProjects] = useState<ProjectView[]>([])
+  const [projectId, setProjectId] = useState('')
 
   useEffect(() => {
     void window.api.rpc({ method: 'getDefaults' }).then((d) => {
@@ -53,6 +55,7 @@ export function Home({
       setInputPath((p) => p || defaults.samplePath)
     })
     void window.api.rpc({ method: 'listRecipes' }).then((r) => setRecipes(r as RecipeView[]))
+    void window.api.rpc({ method: 'listProjects' }).then((r) => setProjects(r as ProjectView[]))
   }, [])
 
   useEffect(() => {
@@ -87,6 +90,7 @@ export function Home({
         goal,
         inputPath: requiresInput ? inputPath : '',
         recipeId,
+        ...(projectId ? { projectId } : {}),
         ...(budgetUsd !== undefined ? { budgetUsd } : {})
       })) as TaskView
       await window.api.rpc({ method: 'startTask', taskId: t.id })
@@ -146,6 +150,12 @@ export function Home({
                 {r.title}
               </option>
             ))}
+          </select>
+        </div>
+        <div className="recipe-row">
+          <select value={projectId} onChange={(e) => setProjectId(e.target.value)} aria-label="Project">
+            <option value="">无项目</option>
+            {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
           </select>
         </div>
         <div className="input-row">

@@ -7,9 +7,10 @@ import { Deliverables } from './Deliverables'
 import { Library } from './Library'
 import { RunInspector } from './RunInspector'
 import { Tasks } from './Tasks'
+import { Projects } from './Projects'
 import type { TaskFilter } from './Tasks'
 
-type ViewId = 'home' | 'task' | 'tasks' | 'deliverables' | 'library' | 'settings' | 'inspector'
+type ViewId = 'home' | 'task' | 'tasks' | 'projects' | 'deliverables' | 'library' | 'settings' | 'inspector'
 
 interface InitialPreset {
   recipeId: string
@@ -20,6 +21,7 @@ interface InitialPreset {
 const NAV_ITEMS: { id: ViewId; label: string }[] = [
   { id: 'home', label: 'Home' },
   { id: 'tasks', label: 'Tasks' },
+  { id: 'projects', label: 'Projects' },
   { id: 'deliverables', label: 'Deliverables' },
   { id: 'library', label: 'Library' },
   { id: 'settings', label: 'Settings' }
@@ -101,6 +103,8 @@ export function App(): React.JSX.Element {
     )
   } else if (view === 'tasks') {
     content = <Tasks tasks={list} initialFilter={initialTasksFilter} onOpenTask={openTask} />
+  } else if (view === 'projects') {
+    content = <Projects tasks={list} onOpenTask={openTask} />
   } else if (view === 'deliverables') {
     content = <Deliverables onOpenTask={openTask} />
   } else if (view === 'library') {

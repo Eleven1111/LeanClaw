@@ -150,6 +150,14 @@ CREATE TABLE IF NOT EXISTS task_presets (
   input_path TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS projects (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  description TEXT NOT NULL DEFAULT '',
+  saved_instructions TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS schema_version (
   version INTEGER NOT NULL
 );
@@ -197,6 +205,22 @@ export const MIGRATIONS: Migration[] = [
     up(database) {
       if (!hasColumn(database, 'tasks', 'refine_instructions')) {
         database.exec('ALTER TABLE tasks ADD COLUMN refine_instructions TEXT')
+      }
+    }
+  },
+  {
+    version: 4,
+    up(database) {
+      database.exec(`CREATE TABLE IF NOT EXISTS projects (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        description TEXT NOT NULL DEFAULT '',
+        saved_instructions TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )`)
+      if (!hasColumn(database, 'tasks', 'project_instructions_snapshot')) {
+        database.exec('ALTER TABLE tasks ADD COLUMN project_instructions_snapshot TEXT')
       }
     }
   }

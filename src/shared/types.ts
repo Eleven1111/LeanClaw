@@ -199,6 +199,8 @@ export interface TaskView {
   status: InternalStatus
   userStatus: UserStatus
   recipeId: string
+  projectId: string | null
+  projectName: string | null
   budgetUsd: number | null
   refineInstructions: string[]
   queuePosition: number | null
@@ -209,6 +211,17 @@ export interface TaskView {
   verifications: VerificationView[]
   evidence: EvidenceView[]
   metrics: TaskMetrics
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ProjectView {
+  id: string
+  name: string
+  description: string
+  savedInstructions: string
+  taskCount: number
+  deliverableCount: number
   createdAt: string
   updatedAt: string
 }
@@ -319,7 +332,7 @@ export interface RunDetailView {
 export type RpcRequest =
   | { method: 'listTasks' }
   | { method: 'getTask'; taskId: string }
-  | { method: 'createTask'; goal: string; inputPath: string; recipeId?: string; budgetUsd?: number }
+  | { method: 'createTask'; goal: string; inputPath: string; recipeId?: string; budgetUsd?: number; projectId?: string }
   | { method: 'startTask'; taskId: string }
   | { method: 'pauseTask'; taskId: string }
   | { method: 'resumeTask'; taskId: string }
@@ -342,6 +355,9 @@ export type RpcRequest =
   | { method: 'archiveAllDelivered' }
   | { method: 'testProvider'; providerId: string }
   | { method: 'mcpStatus' }
+  | { method: 'listProjects' }
+  | { method: 'saveProject'; projectId?: string; name: string; description: string; savedInstructions: string }
+  | { method: 'deleteProject'; projectId: string }
 
 export interface PushEvent {
   type: 'task'

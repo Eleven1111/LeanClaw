@@ -14,6 +14,7 @@ export function buildTaskView(taskId: string): TaskView {
         brief: string | null
         input_path: string
         recipe_id: string
+        project_id: string | null
         status: InternalStatus
         budget_usd: number | null
         refine_instructions: string | null
@@ -22,6 +23,9 @@ export function buildTaskView(taskId: string): TaskView {
       }
     | undefined
   if (!t) throw new Error('任务不存在: ' + taskId)
+  const project = t.project_id
+    ? db.prepare('SELECT name FROM projects WHERE id = ?').get(t.project_id) as { name: string } | undefined
+    : undefined
   const run = db
     .prepare('SELECT * FROM runs WHERE task_id = ? ORDER BY rowid DESC LIMIT 1')
     .get(taskId) as
@@ -82,6 +86,8 @@ export function buildTaskView(taskId: string): TaskView {
     status: t.status,
     userStatus: USER_STATUS_MAP[t.status],
     recipeId: t.recipe_id,
+    projectId: t.project_id ?? null,
+    projectName: project?.name ?? null,
     budgetUsd: t.budget_usd ?? null,
     refineInstructions: parseRefineInstructions(t.refine_instructions),
     queuePosition: getQueuePosition(t.id),

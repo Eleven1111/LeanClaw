@@ -25,6 +25,10 @@ describe('pendingMigrations（迁移框架）', () => {
     expect(pendingMigrations(0, migrations).map((m) => m.version)).toEqual([1, 2])
   })
 
+  it('项目表迁移保持在既有迁移之后', () => {
+    expect(pendingMigrations(3, [{ version: 4, up: noop }]).map((m) => m.version)).toEqual([4])
+  })
+
   it('版本重复时抛出异常', () => {
     const migrations: Migration[] = [
       { version: 1, up: noop },

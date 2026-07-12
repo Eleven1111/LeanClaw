@@ -8,12 +8,13 @@ import { getRuntimeConfig } from './config'
 import { completeWith } from './model'
 import { getMcpStatus } from './mcp'
 import { fileEditRecipe, getRecipe, listRecipes } from './recipe'
-import { parseRefineInstructions, validatePresetInput } from '../shared/verify'
+import { parseRefineInstructions, validatePresetInput, validateProjectInput } from '../shared/verify'
 import type {
   DeliverableView,
   DeliverableDetailView,
   InternalStatus,
   PresetView,
+  ProjectView,
   RecipeView,
   RpcRequest,
   RunDetailView,
@@ -51,7 +52,7 @@ export async function handleRpc(req: RpcRequest): Promise<unknown> {
     case 'getTask':
       return buildTaskView(req.taskId)
     case 'createTask':
-      return createTask(req.goal, req.inputPath, req.recipeId, req.budgetUsd)
+      return createTask(req.goal, req.inputPath, req.recipeId, req.budgetUsd, req.projectId)
     case 'startTask':
       return startTask(req.taskId)
     case 'pauseTask':
@@ -94,6 +95,12 @@ export async function handleRpc(req: RpcRequest): Promise<unknown> {
       return testProvider(req.providerId)
     case 'mcpStatus':
       return getMcpStatus()
+    case 'listProjects':
+      return listProjects()
+    case 'saveProject':
+      return saveProject(req.projectId, req.name, req.description, req.savedInstructions)
+    case 'deleteProject':
+      return deleteProject(req.projectId)
   }
 }
 
@@ -276,7 +283,63 @@ function deletePreset(presetId: string): void {
   getDb().prepare('DELETE FROM task_presets WHERE id = ?').run(presetId)
 }
 
-function createTask(goal: string, inputPath: string, recipeId?: string, budgetUsd?: number): TaskView {
+function listProjects(): ProjectView[] {
+  return getDb().prepare(
+    `SELECT p.id, p.name, p.description, p.saved_instructions as savedInstructions,
+            p.created_at as createdAt, p.updated_at as updatedAt,
+            COUNT(DISTINCT t.id) as taskCount,
+            COUNT(DISTINCT CASE WHEN a.is_deliverable = 1 THEN a.id END) as deliverableCount
+     FROM projects p
+     LEFT JOIN tasks t ON t.project_id = p.id
+     LEFT JOIN artifacts a ON a.task_id = t.id
+     GROUP BY p.id ORDER BY p.updated_at DESC`
+  ).all() as ProjectView[]
+}
+
+function saveProject(
+  projectId: string | undefined,
+  name: string,
+  description: string,
+  savedInstructions: string
+): ProjectView {
+  const validation = validateProjectInput(name, description, savedInstructions)
+  if (!validation.ok) throw new Error(validation.detail)
+  const db = getDb()
+  const id = projectId ?? uid()
+  const timestamp = now()
+  try {
+    if (projectId) {
+      const result = db.prepare(
+        'UPDATE projects SET name = ?, description = ?, saved_instructions = ?, updated_at = ? WHERE id = ?'
+      ).run(name.trim(), description.trim(), savedInstructions.trim(), timestamp, id)
+      if (result.changes !== 1) throw new Error('项目不存在')
+    } else {
+      db.prepare(
+        'INSERT INTO projects (id, name, description, saved_instructions, created_at, updated_at) VALUES (?,?,?,?,?,?)'
+      ).run(id, name.trim(), description.trim(), savedInstructions.trim(), timestamp, timestamp)
+    }
+  } catch (error) {
+    if (String((error as Error).message).includes('UNIQUE')) throw new Error('项目名称已存在')
+    throw error
+  }
+  return listProjects().find((project) => project.id === id) as ProjectView
+}
+
+function deleteProject(projectId: string): void {
+  const db = getDb()
+  const linked = db.prepare('SELECT COUNT(*) as count FROM tasks WHERE project_id = ?').get(projectId) as { count: number }
+  if (linked.count > 0) throw new Error('项目已有任务，不能删除')
+  const result = db.prepare('DELETE FROM projects WHERE id = ?').run(projectId)
+  if (result.changes !== 1) throw new Error('项目不存在')
+}
+
+function createTask(
+  goal: string,
+  inputPath: string,
+  recipeId?: string,
+  budgetUsd?: number,
+  projectId?: string
+): TaskView {
   if (!goal.trim()) throw new Error('任务目标不能为空')
   const rid = recipeId ?? fileEditRecipe.id
   const recipe = getRecipe(rid)
@@ -289,17 +352,36 @@ function createTask(goal: string, inputPath: string, recipeId?: string, budgetUs
   const defaultBudget = getRuntimeConfig().defaultBudgetUsd
   const effectiveBudget = budgetUsd !== undefined ? budgetUsd : defaultBudget > 0 ? defaultBudget : null
   const id = uid()
+  const project = projectId
+    ? getDb().prepare('SELECT id, saved_instructions FROM projects WHERE id = ?').get(projectId) as
+        | { id: string; saved_instructions: string }
+        | undefined
+    : undefined
+  if (projectId && !project) throw new Error('项目不存在')
   getDb()
     .prepare(
-      `INSERT INTO tasks (id, goal, input_path, recipe_id, status, budget_usd, created_at, updated_at)
-       VALUES (?,?,?,?, 'draft', ?, ?, ?)`
+      `INSERT INTO tasks
+       (id, project_id, project_instructions_snapshot, goal, input_path, recipe_id, status, budget_usd, created_at, updated_at)
+       VALUES (?,?,?,?,?,?, 'draft', ?, ?, ?)`
     )
-    .run(id, goal.trim(), inputPath.trim(), rid, effectiveBudget, now(), now())
+    .run(
+      id,
+      project?.id ?? null,
+      project?.saved_instructions ?? null,
+      goal.trim(),
+      inputPath.trim(),
+      rid,
+      effectiveBudget,
+      now(),
+      now()
+    )
   appendEvent(id, 'task-created', {
     goal: goal.trim(),
     inputPath: inputPath.trim(),
     recipeId: rid,
-    budgetUsd: effectiveBudget
+    budgetUsd: effectiveBudget,
+    projectId: project?.id ?? null,
+    hasProjectInstructions: Boolean(project?.saved_instructions)
   })
   return buildTaskView(id)
 }
@@ -309,22 +391,32 @@ function startTask(taskId: string): TaskView {
     goal: string
     input_path: string
     recipe_id: string
+    project_id: string | null
+    project_instructions_snapshot: string | null
   }
   transition(taskId, 'planning')
   const recipe = getRecipe(task.recipe_id)
+  const projectName = task.project_id
+    ? (getDb().prepare('SELECT name FROM projects WHERE id = ?').get(task.project_id) as { name: string } | undefined)?.name
+    : undefined
+  const projectLine = projectName
+    ? `Project：${projectName}${task.project_instructions_snapshot ? '（Saved Instructions 已按创建时快照注入）' : ''}`
+    : null
   const brief =
     recipe.id === 'deep-research'
       ? [
           `目标：${task.goal}`,
+          projectLine,
           '交付契约：一份带引用的 Markdown 研究报告，至少 2 节内容、至少 2 条逐字引用；写入前需人工批准 Diff。',
           `Recipe：${recipe.title}（${recipe.steps.length} 步）`
-        ].join('\n')
+        ].filter(Boolean).join('\n')
       : [
           `目标：${task.goal}`,
+          projectLine,
           `输入：${task.input_path}`,
           '交付契约：一份 Markdown 摘要文件，含标题、摘要和至少 2 条逐字引用；写入前需人工批准 Diff。',
           `Recipe：${recipe.title}（${recipe.steps.length} 步）`
-        ].join('\n')
+        ].filter(Boolean).join('\n')
   getDb().prepare('UPDATE tasks SET brief = ?, updated_at = ? WHERE id = ?').run(brief, now(), taskId)
   const runId = uid()
   getDb()
