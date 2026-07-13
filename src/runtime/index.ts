@@ -1,6 +1,6 @@
 import { homedir } from 'os'
 import { join } from 'path'
-import { initDb } from './db'
+import { getDb, initDb } from './db'
 import { handleRpc, recoverAfterRestart, syncCustomRecipes } from './api'
 import { subscribe } from './bus'
 import { runSmoke } from './smoke'
@@ -14,6 +14,8 @@ import type {
 } from './config'
 import { syncMcpFromConfig } from './mcp'
 import type { RpcRequest } from '../shared/types'
+import type { TaskView } from '../shared/types'
+import { startScheduleLoop } from './schedules'
 
 type ParentMessage =
   | { id: number; req: RpcRequest; kind?: undefined }
@@ -39,6 +41,15 @@ const dataDir = process.env.LEANCLAW_DATA_DIR || join(homedir(), '.leanclaw')
 initDb(dataDir)
 syncCustomRecipes()
 recoverAfterRestart()
+startScheduleLoop(async (schedule) => {
+  const task = await handleRpc({
+    method: 'createTask', goal: schedule.goal, inputPath: schedule.inputPath, recipeId: schedule.recipeId,
+    ...(schedule.projectId ? { projectId: schedule.projectId } : {}),
+    ...(schedule.budgetUsd ? { budgetUsd: schedule.budgetUsd } : {})
+  }) as TaskView
+  getDb().prepare('UPDATE tasks SET schedule_id=? WHERE id=?').run(schedule.id, task.id)
+  await handleRpc({ method: 'startTask', taskId: task.id })
+})
 
 const parentPort = (process as unknown as { parentPort?: ParentPort }).parentPort
 

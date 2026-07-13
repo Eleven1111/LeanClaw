@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { ProjectView, RecipeView, TaskView } from '../../shared/types'
 import { StatusChip } from './TaskWorkspace'
+import { Schedules } from './Schedules'
 
 const DEFAULT_RECIPE_ID = 'file-edit-summarize'
 const RESEARCH_GOAL = '研究 AI Agent 桌面应用的最新发展，输出带引用的分析报告。'
@@ -185,6 +186,13 @@ export function Home({
         </div>
         {error && <div className="error">{error}</div>}
       </div>
+
+      <Schedules
+        disabled={!goal.trim() || (requiresInput && !inputPath.trim())}
+        template={{ goal, inputPath: requiresInput ? inputPath : '', recipeId,
+          ...(projectId ? { projectId } : {}),
+          ...(budgetDraft.trim() ? { budgetUsd: Number(budgetDraft) } : {}) }}
+      />
 
       {running.length > 0 && (
         <section>

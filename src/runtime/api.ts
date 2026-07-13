@@ -10,6 +10,7 @@ import { getMcpStatus } from './mcp'
 import { fileEditRecipe, getRecipe, listRecipes, registerRecipe, unregisterRecipe } from './recipe'
 import { buildCustomRecipe } from './custom-recipe'
 import { validateCustomRecipeInput } from '../shared/custom-recipe'
+import { nextOccurrence, validateScheduleInput } from '../shared/schedule'
 import { parseRefineInstructions, validatePresetInput, validateProjectInput, validateRuleSetInput } from '../shared/verify'
 import type {
   DeliverableView,
@@ -19,6 +20,7 @@ import type {
   ProjectView,
   RuleSetView,
   CustomRecipeView,
+  ScheduleView,
   RecipeView,
   RpcRequest,
   RunDetailView,
@@ -117,6 +119,14 @@ export async function handleRpc(req: RpcRequest): Promise<unknown> {
       return saveCustomRecipe(req)
     case 'deleteCustomRecipe':
       return deleteCustomRecipe(req.customRecipeId)
+    case 'listSchedules':
+      return listSchedules()
+    case 'saveSchedule':
+      return saveSchedule(req)
+    case 'setScheduleEnabled':
+      return setScheduleEnabled(req.scheduleId, req.enabled)
+    case 'deleteSchedule':
+      return deleteSchedule(req.scheduleId)
   }
 }
 
@@ -345,7 +355,8 @@ function saveProject(
 function deleteProject(projectId: string): void {
   const db = getDb()
   const linked = db.prepare('SELECT COUNT(*) as count FROM tasks WHERE project_id = ?').get(projectId) as { count: number }
-  if (linked.count > 0) throw new Error('项目已有任务，不能删除')
+  const scheduled = db.prepare('SELECT COUNT(*) as count FROM schedules WHERE project_id = ?').get(projectId) as { count: number }
+  if (linked.count > 0 || scheduled.count > 0) throw new Error('项目已有任务或定时计划，不能删除')
   const result = db.prepare('DELETE FROM projects WHERE id = ?').run(projectId)
   if (result.changes !== 1) throw new Error('项目不存在')
 }
@@ -445,10 +456,69 @@ function saveCustomRecipe(req: Extract<RpcRequest, { method: 'saveCustomRecipe' 
 
 function deleteCustomRecipe(customRecipeId: string): void {
   const used = getDb().prepare('SELECT COUNT(*) as count FROM tasks WHERE recipe_id = ?').get(`custom:${customRecipeId}`) as { count: number }
-  if (used.count > 0) throw new Error('Recipe 已有任务记录，不能删除')
+  const scheduled = getDb().prepare('SELECT COUNT(*) as count FROM schedules WHERE recipe_id = ?').get(`custom:${customRecipeId}`) as { count: number }
+  if (used.count > 0 || scheduled.count > 0) throw new Error('Recipe 已有任务或定时计划，不能删除')
   const result = getDb().prepare('DELETE FROM custom_recipes WHERE id = ?').run(customRecipeId)
   if (result.changes !== 1) throw new Error('自定义 Recipe 不存在')
   unregisterRecipe(`custom:${customRecipeId}`)
+}
+
+function listSchedules(): ScheduleView[] {
+  const rows = getDb().prepare(
+    `SELECT id,name,goal,input_path as inputPath,recipe_id as recipeId,project_id as projectId,
+            budget_usd as budgetUsd,cadence,time_of_day as timeOfDay,day_of_week as dayOfWeek,
+            next_run_at as nextRunAt,last_triggered_at as lastTriggeredAt,enabled
+     FROM schedules ORDER BY created_at DESC`
+  ).all() as (Omit<ScheduleView, 'recipeTitle' | 'enabled'> & { enabled: number })[]
+  return rows.map((row) => ({ ...row, enabled: Boolean(row.enabled), recipeTitle: getRecipe(row.recipeId).title }))
+}
+
+function saveSchedule(req: Extract<RpcRequest, { method: 'saveSchedule' }>): ScheduleView {
+  const schedule = validateScheduleInput(req)
+  if (!schedule.ok) throw new Error(schedule.detail)
+  const name = req.name.trim()
+  const goal = req.goal.trim()
+  if (!name || name.length > 80) throw new Error('计划名称必须为 1–80 字符')
+  if (!goal || goal.length > 2000) throw new Error('任务目标必须为 1–2000 字符')
+  const recipe = getRecipe(req.recipeId)
+  if (recipe.requiredInputs.includes('inputPath') && !req.inputPath.trim()) throw new Error('该 Recipe 必须指定输入文件')
+  if (req.projectId && !getDb().prepare('SELECT id FROM projects WHERE id=?').get(req.projectId)) throw new Error('项目不存在')
+  if (req.budgetUsd !== undefined && !(req.budgetUsd > 0)) throw new Error('预算必须为正数')
+  const id = req.scheduleId ?? uid()
+  const timestamp = now()
+  const next = nextOccurrence(schedule.value.cadence, schedule.value.timeOfDay, new Date(), schedule.value.dayOfWeek)
+  const values = [name, goal, req.inputPath.trim(), req.recipeId, req.projectId ?? null, req.budgetUsd ?? null,
+    schedule.value.cadence, schedule.value.timeOfDay, schedule.value.dayOfWeek, next.toISOString(), timestamp]
+  if (req.scheduleId) {
+    const result = getDb().prepare(
+      `UPDATE schedules SET name=?,goal=?,input_path=?,recipe_id=?,project_id=?,budget_usd=?,cadence=?,
+       time_of_day=?,day_of_week=?,next_run_at=?,updated_at=? WHERE id=?`
+    ).run(...values, id)
+    if (result.changes !== 1) throw new Error('定时计划不存在')
+  } else {
+    getDb().prepare(
+      `INSERT INTO schedules
+       (id,name,goal,input_path,recipe_id,project_id,budget_usd,cadence,time_of_day,day_of_week,next_run_at,enabled,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,1,?,?)`
+    ).run(id, ...values.slice(0, 10), timestamp, timestamp)
+  }
+  return listSchedules().find((item) => item.id === id) as ScheduleView
+}
+
+function setScheduleEnabled(scheduleId: string, enabled: boolean): ScheduleView {
+  const row = getDb().prepare('SELECT cadence,time_of_day,day_of_week FROM schedules WHERE id=?').get(scheduleId) as
+    | { cadence: 'daily' | 'weekdays' | 'weekly'; time_of_day: string; day_of_week: number | null }
+    | undefined
+  if (!row) throw new Error('定时计划不存在')
+  const next = nextOccurrence(row.cadence, row.time_of_day, new Date(), row.day_of_week)
+  getDb().prepare('UPDATE schedules SET enabled=?,next_run_at=?,updated_at=? WHERE id=?')
+    .run(enabled ? 1 : 0, next.toISOString(), now(), scheduleId)
+  return listSchedules().find((item) => item.id === scheduleId) as ScheduleView
+}
+
+function deleteSchedule(scheduleId: string): void {
+  const result = getDb().prepare('DELETE FROM schedules WHERE id=?').run(scheduleId)
+  if (result.changes !== 1) throw new Error('定时计划不存在')
 }
 
 function createTask(

@@ -250,6 +250,23 @@ export interface CustomRecipeView {
   updatedAt: string
 }
 
+export interface ScheduleView {
+  id: string
+  name: string
+  goal: string
+  inputPath: string
+  recipeId: string
+  recipeTitle: string
+  projectId: string | null
+  budgetUsd: number | null
+  cadence: 'daily' | 'weekdays' | 'weekly'
+  timeOfDay: string
+  dayOfWeek: number | null
+  nextRunAt: string
+  lastTriggeredAt: string | null
+  enabled: boolean
+}
+
 export interface RecipeView {
   id: string
   title: string
@@ -388,6 +405,10 @@ export type RpcRequest =
   | { method: 'listCustomRecipes' }
   | { method: 'saveCustomRecipe'; customRecipeId?: string; name: string; goal: string; stepIds: string[]; ruleSetId: string }
   | { method: 'deleteCustomRecipe'; customRecipeId: string }
+  | { method: 'listSchedules' }
+  | { method: 'saveSchedule'; scheduleId?: string; name: string; goal: string; inputPath: string; recipeId: string; projectId?: string; budgetUsd?: number; cadence: 'daily' | 'weekdays' | 'weekly'; timeOfDay: string; dayOfWeek?: number }
+  | { method: 'setScheduleEnabled'; scheduleId: string; enabled: boolean }
+  | { method: 'deleteSchedule'; scheduleId: string }
 
 export interface PushEvent {
   type: 'task'

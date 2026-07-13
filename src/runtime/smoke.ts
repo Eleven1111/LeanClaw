@@ -9,12 +9,17 @@ import { getTool } from './tools'
 import { riskForShell } from './tools-shell'
 import { mcpToolId } from '../shared/mcp'
 import type { TaskView } from '../shared/types'
+import { runDueSchedules, type DueSchedule } from './schedules'
 
 const out = (s: string): void => {
   process.stdout.write(s + '\n')
 }
 
 export async function runSmoke(): Promise<void> {
+  if (process.env.LEANCLAW_SMOKE_SCHEDULE) {
+    await runScheduleSmoke()
+    return
+  }
   if (process.env.LEANCLAW_SMOKE_MCP) {
     await runMcpSmoke()
     return
@@ -32,6 +37,52 @@ export async function runSmoke(): Promise<void> {
     return
   }
   await runSingleSmoke()
+}
+
+async function runScheduleSmoke(): Promise<void> {
+  const at = new Date()
+  const schedule = await handleRpc({
+    method: 'saveSchedule', name: '冒烟定时任务', goal: '把文件整理成带引用摘要',
+    inputPath: getSamplePath(), recipeId: 'file-edit-summarize', cadence: 'daily', timeOfDay: '08:00'
+  }) as { id: string }
+  getDb().prepare('UPDATE schedules SET next_run_at=? WHERE id=?').run(new Date(at.getTime() - 1000).toISOString(), schedule.id)
+  const trigger = async (due: DueSchedule): Promise<void> => {
+    const task = await handleRpc({ method: 'createTask', goal: due.goal, inputPath: due.inputPath, recipeId: due.recipeId }) as TaskView
+    getDb().prepare('UPDATE tasks SET schedule_id=? WHERE id=?').run(due.id, task.id)
+    await handleRpc({ method: 'startTask', taskId: task.id })
+  }
+  await runDueSchedules(trigger, at)
+  let final: TaskView | undefined
+  for (let i = 0; i < 200; i++) {
+    const row = getDb().prepare('SELECT id FROM tasks WHERE schedule_id=?').get(schedule.id) as { id: string } | undefined
+    if (row) {
+      final = await handleRpc({ method: 'getTask', taskId: row.id }) as TaskView
+      const approval = final.approvals.find((item) => item.status === 'pending')
+      if (approval) await handleRpc({ method: 'resolveApproval', approvalId: approval.id, decision: 'approved' })
+      if (['delivered','verification_failed','cancelled_by_user','failed'].includes(final.status)) break
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  }
+  await runDueSchedules(trigger, at)
+  const count = (getDb().prepare('SELECT COUNT(*) as count FROM tasks WHERE schedule_id=?').get(schedule.id) as { count: number }).count
+  const state = getDb().prepare('SELECT next_run_at,last_triggered_at FROM schedules WHERE id=?').get(schedule.id) as { next_run_at: string; last_triggered_at: string | null }
+  const concurrent = await handleRpc({ method: 'saveSchedule', name: '并发认领', goal: 'x', inputPath: getSamplePath(), recipeId: 'file-edit-summarize', cadence: 'daily', timeOfDay: '08:00' }) as { id: string }
+  getDb().prepare('UPDATE schedules SET next_run_at=? WHERE id=?').run(new Date(at.getTime() - 1000).toISOString(), concurrent.id)
+  let claims = 0
+  await Promise.all([
+    runDueSchedules(async () => { claims++ }, at),
+    runDueSchedules(async () => { claims++ }, at)
+  ])
+  const paused = await handleRpc({ method: 'saveSchedule', name: '暂停计划', goal: 'x', inputPath: getSamplePath(), recipeId: 'file-edit-summarize', cadence: 'daily', timeOfDay: '08:00' }) as { id: string }
+  await handleRpc({ method: 'setScheduleEnabled', scheduleId: paused.id, enabled: false })
+  getDb().prepare('UPDATE schedules SET next_run_at=? WHERE id=?').run(new Date(at.getTime() - 1000).toISOString(), paused.id)
+  let pausedClaims = 0
+  await runDueSchedules(async () => { pausedClaims++ }, at)
+  const ok = final?.status === 'delivered' && count === 1 && Boolean(state.last_triggered_at) &&
+    state.next_run_at > at.toISOString() && claims === 1 && pausedClaims === 0
+  out(`[schedule] status=${final?.status} tasks=${count} next=future last=set concurrentClaims=${claims} pausedClaims=${pausedClaims}`)
+  out(ok ? '[smoke] PASS（定时任务：到点入队、交付、防重复）' : '[smoke] FAIL（定时任务）')
+  process.exit(ok ? 0 : 1)
 }
 
 async function runShellSmoke(): Promise<void> {

@@ -178,6 +178,23 @@ CREATE TABLE IF NOT EXISTS custom_recipes (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS schedules (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  goal TEXT NOT NULL,
+  input_path TEXT NOT NULL DEFAULT '',
+  recipe_id TEXT NOT NULL,
+  project_id TEXT,
+  budget_usd REAL,
+  cadence TEXT NOT NULL,
+  time_of_day TEXT NOT NULL,
+  day_of_week INTEGER,
+  next_run_at TEXT NOT NULL,
+  last_triggered_at TEXT,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS schema_version (
   version INTEGER NOT NULL
 );
@@ -272,6 +289,31 @@ export const MIGRATIONS: Migration[] = [
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )`)
+    }
+  },
+  {
+    version: 7,
+    up(database) {
+      database.exec(`CREATE TABLE IF NOT EXISTS schedules (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        goal TEXT NOT NULL,
+        input_path TEXT NOT NULL DEFAULT '',
+        recipe_id TEXT NOT NULL,
+        project_id TEXT,
+        budget_usd REAL,
+        cadence TEXT NOT NULL,
+        time_of_day TEXT NOT NULL,
+        day_of_week INTEGER,
+        next_run_at TEXT NOT NULL,
+        last_triggered_at TEXT,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )`)
+      if (!hasColumn(database, 'tasks', 'schedule_id')) {
+        database.exec('ALTER TABLE tasks ADD COLUMN schedule_id TEXT')
+      }
     }
   }
 ]
