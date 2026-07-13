@@ -239,6 +239,17 @@ export interface RuleSetView {
   updatedAt: string
 }
 
+export interface CustomRecipeView {
+  id: string
+  name: string
+  goal: string
+  stepIds: string[]
+  ruleSetId: string
+  ruleSetName: string
+  createdAt: string
+  updatedAt: string
+}
+
 export interface RecipeView {
   id: string
   title: string
@@ -374,6 +385,9 @@ export type RpcRequest =
   | { method: 'listRuleSets' }
   | { method: 'saveRuleSet'; ruleSetId?: string; name: string; bannedWords: string[]; minLength: number; maxLength: number; mustStartWith: string; requiredHeadings: string[] }
   | { method: 'deleteRuleSet'; ruleSetId: string }
+  | { method: 'listCustomRecipes' }
+  | { method: 'saveCustomRecipe'; customRecipeId?: string; name: string; goal: string; stepIds: string[]; ruleSetId: string }
+  | { method: 'deleteCustomRecipe'; customRecipeId: string }
 
 export interface PushEvent {
   type: 'task'

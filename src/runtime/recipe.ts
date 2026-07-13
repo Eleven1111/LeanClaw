@@ -92,4 +92,13 @@ export function listRecipes(): LoopTemplate[] {
   return Array.from(recipes.values())
 }
 
+export function registerRecipe(recipe: LoopTemplate): void {
+  if (!recipe.id.startsWith('custom:')) throw new Error('动态 Recipe id 必须以 custom: 开头')
+  recipes.set(recipe.id, recipe)
+}
+
+export function unregisterRecipe(id: string): void {
+  if (id.startsWith('custom:')) recipes.delete(id)
+}
+
 export { fileEditRecipe, deepResearchRecipe, contentPackRecipe }

@@ -815,6 +815,12 @@ button.link {
 .rule-sets { margin-top: 28px; }
 .rule-form { display: grid; gap: 10px; margin-bottom: 16px; }
 .rule-lengths { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.custom-recipes { margin-top: 28px; }
+.custom-recipe-form { display: grid; gap: 10px; }
+.composer-steps { display: grid; gap: 6px; list-style: none; padding: 0; }
+.composer-steps li { align-items: center; background: var(--bg); border-radius: 8px; display: grid; gap: 10px; grid-template-columns: 24px 1fr auto; padding: 8px 10px; }
+.composer-steps li > span { color: var(--accent); font-weight: 700; }
+.composer-steps code { color: var(--muted); font-size: 11px; }
 
 .budget-input {
   width: auto;

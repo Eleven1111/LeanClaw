@@ -22,9 +22,10 @@ export function RuleSets(): React.JSX.Element {
     try {
       await window.api.rpc({ method: 'saveRuleSet', ...(editingId ? { ruleSetId: editingId } : {}), name: form.name, bannedWords: lines(form.bannedWords), minLength: Number(form.minLength), maxLength: Number(form.maxLength), mustStartWith: form.mustStartWith, requiredHeadings: lines(form.requiredHeadings) })
       setOpen(false); await refresh()
+      window.dispatchEvent(new Event('rules-changed'))
     } catch (e) { setError((e as Error).message) }
   }
-  const remove = async (id: string): Promise<void> => { await window.api.rpc({ method: 'deleteRuleSet', ruleSetId: id }); await refresh() }
+  const remove = async (id: string): Promise<void> => { await window.api.rpc({ method: 'deleteRuleSet', ruleSetId: id }); await refresh(); window.dispatchEvent(new Event('rules-changed')) }
 
   return <section className="rule-sets">
     <div className="section-head"><div><h2>规则集</h2><p className="muted">确定性检查：禁用词、长度与必含结构。</p></div><button onClick={() => begin()}>新建规则集</button></div>

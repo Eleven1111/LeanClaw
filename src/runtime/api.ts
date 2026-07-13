@@ -7,7 +7,9 @@ import { requestRun } from './scheduler'
 import { getRuntimeConfig } from './config'
 import { completeWith } from './model'
 import { getMcpStatus } from './mcp'
-import { fileEditRecipe, getRecipe, listRecipes } from './recipe'
+import { fileEditRecipe, getRecipe, listRecipes, registerRecipe, unregisterRecipe } from './recipe'
+import { buildCustomRecipe } from './custom-recipe'
+import { validateCustomRecipeInput } from '../shared/custom-recipe'
 import { parseRefineInstructions, validatePresetInput, validateProjectInput, validateRuleSetInput } from '../shared/verify'
 import type {
   DeliverableView,
@@ -16,6 +18,7 @@ import type {
   PresetView,
   ProjectView,
   RuleSetView,
+  CustomRecipeView,
   RecipeView,
   RpcRequest,
   RunDetailView,
@@ -108,6 +111,12 @@ export async function handleRpc(req: RpcRequest): Promise<unknown> {
       return saveRuleSet(req)
     case 'deleteRuleSet':
       return deleteRuleSet(req.ruleSetId)
+    case 'listCustomRecipes':
+      return listCustomRecipes()
+    case 'saveCustomRecipe':
+      return saveCustomRecipe(req)
+    case 'deleteCustomRecipe':
+      return deleteCustomRecipe(req.customRecipeId)
   }
 }
 
@@ -385,8 +394,61 @@ function saveRuleSet(req: Extract<RpcRequest, { method: 'saveRuleSet' }>): RuleS
 }
 
 function deleteRuleSet(ruleSetId: string): void {
+  const linked = getDb().prepare('SELECT COUNT(*) as count FROM custom_recipes WHERE rule_set_id = ?').get(ruleSetId) as { count: number }
+  if (linked.count > 0) throw new Error('规则集已被自定义 Recipe 引用，不能删除')
   const result = getDb().prepare('DELETE FROM rule_sets WHERE id = ?').run(ruleSetId)
   if (result.changes !== 1) throw new Error('规则集不存在')
+}
+
+function listCustomRecipes(): CustomRecipeView[] {
+  const rows = getDb().prepare(
+    `SELECT c.id, c.name, c.goal, c.step_ids as stepIds, c.rule_set_id as ruleSetId,
+            r.name as ruleSetName, c.created_at as createdAt, c.updated_at as updatedAt
+     FROM custom_recipes c JOIN rule_sets r ON r.id = c.rule_set_id ORDER BY c.updated_at DESC`
+  ).all() as (Omit<CustomRecipeView, 'stepIds'> & { stepIds: string })[]
+  return rows.map((row) => ({ ...row, stepIds: JSON.parse(row.stepIds) as string[] }))
+}
+
+export function syncCustomRecipes(): void {
+  for (const row of listCustomRecipes()) {
+    registerRecipe(buildCustomRecipe({ id: row.id, name: row.name, goal: row.goal, stepIds: row.stepIds, ruleSetId: row.ruleSetId }))
+  }
+}
+
+function saveCustomRecipe(req: Extract<RpcRequest, { method: 'saveCustomRecipe' }>): CustomRecipeView {
+  const validation = validateCustomRecipeInput(req)
+  if (!validation.ok) throw new Error(validation.detail)
+  const rule = getDb().prepare('SELECT id FROM rule_sets WHERE id = ?').get(validation.value.ruleSetId)
+  if (!rule) throw new Error('规则集不存在')
+  const id = req.customRecipeId ?? uid()
+  const timestamp = now()
+  try {
+    if (req.customRecipeId) {
+      const result = getDb().prepare(
+        'UPDATE custom_recipes SET name=?, goal=?, step_ids=?, rule_set_id=?, updated_at=? WHERE id=?'
+      ).run(validation.value.name, validation.value.goal, JSON.stringify(validation.value.stepIds), validation.value.ruleSetId, timestamp, id)
+      if (result.changes !== 1) throw new Error('自定义 Recipe 不存在')
+      unregisterRecipe(`custom:${id}`)
+    } else {
+      getDb().prepare(
+        'INSERT INTO custom_recipes (id,name,goal,step_ids,rule_set_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?)'
+      ).run(id, validation.value.name, validation.value.goal, JSON.stringify(validation.value.stepIds), validation.value.ruleSetId, timestamp, timestamp)
+    }
+  } catch (error) {
+    if (String((error as Error).message).includes('UNIQUE')) throw new Error('Recipe 名称已存在')
+    throw error
+  }
+  const view = listCustomRecipes().find((item) => item.id === id) as CustomRecipeView
+  registerRecipe(buildCustomRecipe({ id, name: view.name, goal: view.goal, stepIds: view.stepIds, ruleSetId: view.ruleSetId }))
+  return view
+}
+
+function deleteCustomRecipe(customRecipeId: string): void {
+  const used = getDb().prepare('SELECT COUNT(*) as count FROM tasks WHERE recipe_id = ?').get(`custom:${customRecipeId}`) as { count: number }
+  if (used.count > 0) throw new Error('Recipe 已有任务记录，不能删除')
+  const result = getDb().prepare('DELETE FROM custom_recipes WHERE id = ?').run(customRecipeId)
+  if (result.changes !== 1) throw new Error('自定义 Recipe 不存在')
+  unregisterRecipe(`custom:${customRecipeId}`)
 }
 
 function createTask(

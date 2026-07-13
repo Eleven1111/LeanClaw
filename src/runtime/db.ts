@@ -169,6 +169,15 @@ CREATE TABLE IF NOT EXISTS rule_sets (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS custom_recipes (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  goal TEXT NOT NULL,
+  step_ids TEXT NOT NULL,
+  rule_set_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS schema_version (
   version INTEGER NOT NULL
 );
@@ -246,6 +255,20 @@ export const MIGRATIONS: Migration[] = [
         max_length INTEGER NOT NULL DEFAULT 20000,
         must_start_with TEXT NOT NULL DEFAULT '',
         required_headings TEXT NOT NULL DEFAULT '[]',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )`)
+    }
+  },
+  {
+    version: 6,
+    up(database) {
+      database.exec(`CREATE TABLE IF NOT EXISTS custom_recipes (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        goal TEXT NOT NULL,
+        step_ids TEXT NOT NULL,
+        rule_set_id TEXT NOT NULL,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )`)

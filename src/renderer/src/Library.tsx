@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { PresetView, RecipeView } from '../../shared/types'
 import { RuleSets } from './RuleSets'
+import { CustomRecipes } from './CustomRecipes'
 
 const DELETE_CONFIRM_MS = 3000
 
@@ -120,7 +121,7 @@ export function Library({
           )}
 
           <div className="card-grid">
-            {recipes.map((r) => (
+            {recipes.filter((r) => !r.id.startsWith('custom:')).map((r) => (
               <div key={r.id} className="card recipe-card">
                 <h3>{r.title}</h3>
                 <p className="muted">{r.goal}</p>
@@ -134,6 +135,7 @@ export function Library({
             ))}
           </div>
           <RuleSets />
+          <CustomRecipes onUse={onUseRecipe} />
         </>
       )}
     </div>

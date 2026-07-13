@@ -1,7 +1,7 @@
 import { homedir } from 'os'
 import { join } from 'path'
 import { initDb } from './db'
-import { handleRpc, recoverAfterRestart } from './api'
+import { handleRpc, recoverAfterRestart, syncCustomRecipes } from './api'
 import { subscribe } from './bus'
 import { runSmoke } from './smoke'
 import { setRuntimeConfig } from './config'
@@ -37,6 +37,7 @@ interface ParentPort {
 
 const dataDir = process.env.LEANCLAW_DATA_DIR || join(homedir(), '.leanclaw')
 initDb(dataDir)
+syncCustomRecipes()
 recoverAfterRestart()
 
 const parentPort = (process as unknown as { parentPort?: ParentPort }).parentPort
