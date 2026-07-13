@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { DeliverableDetailView, DeliverableView } from '../../shared/types'
 import { parseEvidenceLocator } from '../../shared/verify'
 import { RichDeliverablePreview } from './RichDeliverablePreview'
+import { VersionCompare } from './VersionCompare'
 
 export function Deliverables({
   onOpenTask
@@ -14,6 +15,7 @@ export function Deliverables({
   const [detail, setDetail] = useState<DeliverableDetailView | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [exportStatus, setExportStatus] = useState('')
+  const [compareOpen, setCompareOpen] = useState(false)
 
   useEffect(() => {
     void window.api.rpc({ method: 'listDeliverables' }).then((r) => {
@@ -27,6 +29,7 @@ export function Deliverables({
   useEffect(() => {
     if (!selectedId) {
       setDetail(null)
+      setCompareOpen(false)
       return
     }
     setDetailLoading(true)
@@ -101,6 +104,7 @@ export function Deliverables({
               <button disabled={!detail} onClick={() => void copySelected()}>复制</button>
               <button disabled={!detail} onClick={() => void saveSelected()}>另存为</button>
               <button disabled={!detail} onClick={() => void exportPdf()}>导出 PDF</button>
+              <button disabled={!detail || detail.version < 2} onClick={() => setCompareOpen((open) => !open)}>版本对比</button>
               {selected.localPath && (
                 <button onClick={() => void window.api.reveal(selected.localPath as string)}>
                   在 Finder 中显示
@@ -135,6 +139,7 @@ export function Deliverables({
           )}
         </section>
       )}
+      {selected && compareOpen && <VersionCompare artifactId={selected.id} onClose={() => setCompareOpen(false)} />}
     </div>
   )
 }

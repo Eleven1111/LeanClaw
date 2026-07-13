@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { DeliverableDetailView, InternalStatus, RpcRequest, TaskView, UserStatus } from '../../shared/types'
 import { parseEvidenceLocator } from '../../shared/verify'
 import { RichDeliverablePreview } from './RichDeliverablePreview'
+import { VersionCompare } from './VersionCompare'
 
 const BRIEF_EDITABLE_STATUSES: InternalStatus[] = [
   'draft',
@@ -72,6 +73,7 @@ export function TaskWorkspace({
   const [refineBusy, setRefineBusy] = useState(false)
   const [refineError, setRefineError] = useState('')
   const [deliverableDetail, setDeliverableDetail] = useState<DeliverableDetailView | null>(null)
+  const [compareOpen, setCompareOpen] = useState(false)
   const exec = (req: RpcRequest): void => {
     setError('')
     window.api.rpc(req).catch((e: Error) => setError(e.message))
@@ -383,6 +385,9 @@ export function TaskWorkspace({
               <div className="deliv-head">
                 <strong>{deliverable.title}</strong>
                 <span className="chip chip-gray">v{deliverable.version}</span>
+                <button disabled={deliverable.version < 2} onClick={() => setCompareOpen((open) => !open)}>
+                  版本对比
+                </button>
                 {deliverable.localPath && (
                   <button onClick={() => void window.api.reveal(deliverable.localPath as string)}>
                     在 Finder 中显示
@@ -406,6 +411,9 @@ export function TaskWorkspace({
                 </div>
               )}
             </section>
+          )}
+          {deliverable && compareOpen && (
+            <VersionCompare artifactId={deliverable.id} onClose={() => setCompareOpen(false)} />
           )}
 
           {isReviewState && (

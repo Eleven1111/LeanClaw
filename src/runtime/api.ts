@@ -15,6 +15,7 @@ import { parseRefineInstructions, validatePresetInput, validateProjectInput, val
 import type {
   DeliverableView,
   DeliverableDetailView,
+  DeliverableHistoryView,
   InternalStatus,
   PresetView,
   ProjectView,
@@ -83,6 +84,8 @@ export async function handleRpc(req: RpcRequest): Promise<unknown> {
       return listDeliverables()
     case 'getDeliverable':
       return getDeliverable(req.artifactId)
+    case 'getDeliverableHistory':
+      return getDeliverableHistory(req.artifactId)
     case 'getRunDetail':
       return getRunDetail(req.taskId)
     case 'savePreset':
@@ -186,15 +189,16 @@ function listRecipeViews(): RecipeView[] {
 function listDeliverables(): DeliverableView[] {
   const rows = getDb()
     .prepare(
-      `SELECT a.id as id, a.title as title, a.task_id as taskId, t.goal as taskGoal,
+      `SELECT a.id as id, a.title as title, a.version as version, a.task_id as taskId, t.goal as taskGoal,
               a.local_path as localPath, a.content as content,
               a.verification_status as verificationStatus, a.created_at as createdAt
        FROM artifacts a JOIN tasks t ON a.task_id = t.id
-       WHERE a.is_deliverable = 1
+       WHERE a.is_deliverable = 1 AND a.superseded_by IS NULL
        ORDER BY a.created_at DESC`
     )
     .all() as {
     id: string
+    version: number
     title: string
     taskId: string
     taskGoal: string
@@ -205,6 +209,7 @@ function listDeliverables(): DeliverableView[] {
   }[]
   return rows.map((r) => ({
     id: r.id,
+    version: r.version,
     title: r.title,
     taskId: r.taskId,
     taskGoal: r.taskGoal,
@@ -218,7 +223,7 @@ function listDeliverables(): DeliverableView[] {
 function getDeliverable(artifactId: string): DeliverableDetailView {
   const row = getDb()
     .prepare(
-      `SELECT a.id, a.title, a.task_id as taskId, t.goal as taskGoal,
+      `SELECT a.id, a.title, a.version, a.task_id as taskId, t.goal as taskGoal,
               a.local_path as localPath, a.content, a.verification_status as verificationStatus,
               a.created_at as createdAt
        FROM artifacts a JOIN tasks t ON a.task_id = t.id
@@ -226,6 +231,7 @@ function getDeliverable(artifactId: string): DeliverableDetailView {
     )
     .get(artifactId) as {
     id: string
+    version: number
     title: string
     taskId: string
     taskGoal: string
@@ -245,6 +251,32 @@ function getDeliverable(artifactId: string): DeliverableDetailView {
     .all(row.taskId) as DeliverableDetailView['evidence']
   const content = String(row.content ?? '')
   return { ...row, content, contentPreview: content.slice(0, 500), evidence }
+}
+
+function getDeliverableHistory(artifactId: string): DeliverableHistoryView {
+  const selected = getDb()
+    .prepare(
+      `SELECT a.task_id as taskId, t.goal as taskGoal
+       FROM artifacts a JOIN tasks t ON a.task_id = t.id
+       WHERE a.id = ? AND a.is_deliverable = 1`
+    )
+    .get(artifactId) as { taskId: string; taskGoal: string } | undefined
+  if (!selected) throw new Error('交付物不存在')
+
+  const versions = getDb()
+    .prepare(
+      `SELECT id, title, version, content, verification_status as verificationStatus,
+              created_at as createdAt
+       FROM artifacts
+       WHERE task_id = ? AND is_deliverable = 1
+       ORDER BY version ASC`
+    )
+    .all(selected.taskId) as DeliverableHistoryView['versions']
+
+  return {
+    ...selected,
+    versions: versions.map((version) => ({ ...version, content: String(version.content ?? '') }))
+  }
 }
 
 function toPresetView(row: {

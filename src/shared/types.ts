@@ -289,6 +289,7 @@ export interface PresetView {
 
 export interface DeliverableView {
   id: string
+  version: number
   title: string
   taskId: string
   taskGoal: string
@@ -301,6 +302,21 @@ export interface DeliverableView {
 export interface DeliverableDetailView extends DeliverableView {
   content: string
   evidence: EvidenceView[]
+}
+
+export interface DeliverableVersionView {
+  id: string
+  title: string
+  version: number
+  content: string
+  verificationStatus: string
+  createdAt: string
+}
+
+export interface DeliverableHistoryView {
+  taskId: string
+  taskGoal: string
+  versions: DeliverableVersionView[]
 }
 
 export interface RunToolCallDetail {
@@ -387,6 +403,7 @@ export type RpcRequest =
   | { method: 'refineTask'; taskId: string; instruction: string }
   | { method: 'listDeliverables' }
   | { method: 'getDeliverable'; artifactId: string }
+  | { method: 'getDeliverableHistory'; artifactId: string }
   | { method: 'getRunDetail'; taskId: string }
   | { method: 'savePreset'; name: string; goal: string; recipeId: string; inputPath: string }
   | { method: 'listPresets' }
