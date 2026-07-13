@@ -5,6 +5,7 @@ import { unifiedDiff } from '../shared/diff'
 import { webFetchTool, webSearchTool } from './tools-web'
 import { shellRunTool } from './tools-shell'
 import { ToolError, type ToolContext, type ToolDefinition, type ToolResult } from './tool-types'
+import { extractPdfText, extractXlsxText } from './document-files'
 
 export { ToolError, type ToolContext, type ToolDefinition, type ToolResult }
 
@@ -24,8 +25,13 @@ const readFileTool: ToolDefinition = {
   async execute(input) {
     const path = String(input.path ?? '')
     if (!existsSync(path)) throw new ToolError(`输入文件不存在: ${path}`, false)
-    const raw = readFileSync(path, 'utf8')
-    const content = path.toLowerCase().endsWith('.csv') ? csvToMarkdown(raw) : raw
+    const lower = path.toLowerCase()
+    const raw = lower.endsWith('.pdf') || lower.endsWith('.xlsx') ? '' : readFileSync(path, 'utf8')
+    const content = lower.endsWith('.pdf')
+      ? await extractPdfText(path)
+      : lower.endsWith('.xlsx')
+        ? await extractXlsxText(path)
+        : lower.endsWith('.csv') ? csvToMarkdown(raw) : raw
     return { summary: `已读取 ${path}（${content.length} 字符）`, data: { content } }
   }
 }
