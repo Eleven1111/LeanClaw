@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { PresetView, TaskView } from '../../shared/types'
 import { Home } from './Home'
 import { Settings } from './Settings'
@@ -9,6 +9,7 @@ import { RunInspector } from './RunInspector'
 import { Tasks } from './Tasks'
 import { Projects } from './Projects'
 import type { TaskFilter } from './Tasks'
+import { CommandPalette, type PaletteCommand } from './CommandPalette'
 
 type ViewId = 'home' | 'task' | 'tasks' | 'projects' | 'deliverables' | 'library' | 'settings' | 'inspector'
 
@@ -33,6 +34,7 @@ export function App(): React.JSX.Element {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const [initialPreset, setInitialPreset] = useState<InitialPreset | undefined>(undefined)
   const [initialTasksFilter, setInitialTasksFilter] = useState<TaskFilter | undefined>(undefined)
+  const [paletteOpen, setPaletteOpen] = useState(false)
 
   const refresh = useCallback(async () => {
     const list = (await window.api.rpc({ method: 'listTasks' })) as TaskView[]
@@ -87,6 +89,57 @@ export function App(): React.JSX.Element {
     setView('inspector')
   }
 
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.metaKey && event.key.toLocaleLowerCase() === 'k') {
+        event.preventDefault()
+        setPaletteOpen((open) => !open)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
+
+  const commands = useMemo<PaletteCommand[]>(() => {
+    const navigateCommands = NAV_ITEMS.map((item) => ({
+      id: `nav-${item.id}`,
+      label: `切换到 ${item.label}`,
+      keywords: ['页面', item.label],
+      run: () => navigate(item.id)
+    }))
+    const taskCommands = list.map((task) => ({
+      id: `task-${task.id}`,
+      label: `任务 · ${task.goal}`,
+      keywords: [task.userStatus, task.projectName ?? ''],
+      hint: task.userStatus,
+      run: () => openTask(task.id)
+    }))
+    const deliverableCommands = list.flatMap((task) => task.artifacts
+      .filter((artifact) => artifact.isDeliverable)
+      .map((artifact) => ({
+        id: `artifact-${artifact.id}`,
+        label: `交付物 · ${artifact.title}`,
+        keywords: [task.goal, `v${artifact.version}`],
+        hint: `v${artifact.version}`,
+        run: () => openTask(task.id)
+      })))
+    return [
+      {
+        id: 'new-task',
+        label: '发起任务',
+        keywords: ['新任务', 'new task', 'Home'],
+        hint: 'Home',
+        run: () => {
+          navigate('home')
+          window.setTimeout(() => document.querySelector<HTMLTextAreaElement>('.input-card textarea')?.focus(), 0)
+        }
+      },
+      ...navigateCommands,
+      ...taskCommands,
+      ...deliverableCommands
+    ]
+  }, [list])
+
   let content: React.JSX.Element
   if (view === 'task' && current) {
     content = (
@@ -140,6 +193,9 @@ export function App(): React.JSX.Element {
           ))}
         </div>
         <div className="sidebar-nav sidebar-nav-secondary">
+          <button className="sidebar-item command-trigger" onClick={() => setPaletteOpen(true)}>
+            <span>命令面板</span><kbd>⌘K</kbd>
+          </button>
           <div className="sidebar-group-label">Advanced</div>
           <button
             className={`sidebar-item ${view === 'inspector' ? 'active' : ''}`}
@@ -153,6 +209,7 @@ export function App(): React.JSX.Element {
         <div className="titlebar" />
         {content}
       </div>
+      {paletteOpen && <CommandPalette commands={commands} onClose={() => setPaletteOpen(false)} />}
     </div>
   )
 }

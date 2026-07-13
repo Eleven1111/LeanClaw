@@ -40,6 +40,43 @@ body {
   user-select: none;
 }
 
+.quick-capture {
+  min-height: 210px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--panel);
+  box-shadow: 0 24px 80px rgb(0 0 0 / 32%);
+}
+
+.quick-head,
+.quick-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.quick-head {
+  justify-content: space-between;
+  margin-bottom: 10px;
+  -webkit-app-region: drag;
+}
+
+.quick-capture textarea {
+  width: 100%;
+  height: 76px;
+  resize: none;
+  padding: 10px 12px;
+}
+
+.quick-actions {
+  margin-top: 8px;
+}
+
+.quick-actions select { max-width: 190px; }
+.quick-actions input { flex: 1; min-width: 0; }
+.quick-actions button { margin-left: auto; }
+
 .titlebar {
   height: 38px;
   -webkit-app-region: drag;
@@ -112,6 +149,86 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   padding: 6px 12px 2px;
+}
+
+.command-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+kbd {
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--muted);
+  background: var(--bg);
+  font: inherit;
+  font-size: 11px;
+}
+
+.command-backdrop {
+  position: fixed;
+  z-index: 50;
+  inset: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 14vh;
+  background: rgb(0 0 0 / 28%);
+}
+
+.command-palette {
+  width: min(620px, calc(100vw - 40px));
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--panel);
+  box-shadow: 0 24px 80px rgb(0 0 0 / 28%);
+}
+
+.command-palette > input {
+  width: 100%;
+  padding: 16px 18px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  font-size: 16px;
+  outline: none;
+}
+
+.command-results {
+  max-height: min(440px, 58vh);
+  padding: 6px;
+  overflow-y: auto;
+}
+
+.command-results > button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+
+.command-results > button.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.command-results small {
+  color: inherit;
+  opacity: 0.72;
+}
+
+.command-results > .muted {
+  padding: 18px 12px;
 }
 
 .content-area {

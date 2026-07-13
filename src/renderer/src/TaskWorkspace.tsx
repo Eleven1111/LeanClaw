@@ -138,6 +138,23 @@ export function TaskWorkspace({
       .then((result) => setDeliverableDetail(result as DeliverableDetailView))
   }, [deliverable?.id])
 
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (document.querySelector('.command-backdrop')) return
+      const target = event.target as HTMLElement | null
+      const isEditing = target?.matches('input, textarea, select, [contenteditable="true"]') ?? false
+      if (event.key === 'Escape' && !isEditing) {
+        event.preventDefault()
+        onBack()
+      } else if (event.metaKey && event.key === 'Enter' && pendingApproval) {
+        event.preventDefault()
+        exec({ method: 'resolveApproval', approvalId: pendingApproval.id, decision: 'approved' })
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [onBack, pendingApproval?.id])
+
   const openPresetForm = (): void => {
     setPresetName(task.goal.slice(0, 30))
     setPresetError('')

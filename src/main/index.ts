@@ -8,6 +8,7 @@ import {
   Menu,
   nativeImage,
   Notification,
+  screen,
   shell,
   Tray,
   utilityProcess
@@ -73,6 +74,7 @@ if (process.env.LEANCLAW_DATA_DIR) {
 }
 
 let win: BrowserWindow | null = null
+let quickWin: BrowserWindow | null = null
 let tray: Tray | null = null
 let runtime: UtilityProcess | null = null
 let seq = 0
@@ -126,6 +128,47 @@ function showOrCreateWindow(): void {
   } else {
     createWindow()
   }
+}
+
+function showQuickCapture(): void {
+  if (!quickWin) {
+    quickWin = new BrowserWindow({
+      width: 560,
+      height: 210,
+      show: false,
+      frame: false,
+      resizable: false,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      transparent: true,
+      webPreferences: {
+        preload: join(__dirname, '../preload/index.js'),
+        sandbox: true,
+        contextIsolation: true,
+        nodeIntegration: false
+      }
+    })
+    quickWin.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+    quickWin.webContents.on('will-navigate', (event) => event.preventDefault())
+    if (process.env.ELECTRON_RENDERER_URL) {
+      void quickWin.loadURL(`${process.env.ELECTRON_RENDERER_URL}?quick=1`)
+    } else {
+      void quickWin.loadFile(join(__dirname, '../renderer/index.html'), { query: { quick: '1' } })
+    }
+    quickWin.on('closed', () => { quickWin = null })
+  }
+  if (quickWin.isVisible()) {
+    quickWin.hide()
+    return
+  }
+  const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
+  const [width, height] = quickWin.getSize()
+  quickWin.setPosition(
+    Math.round(display.workArea.x + (display.workArea.width - width) / 2),
+    Math.round(display.workArea.y + display.workArea.height * 0.18 - height / 2)
+  )
+  quickWin.show()
+  quickWin.focus()
 }
 
 function countRunningTasks(): number {
@@ -246,6 +289,14 @@ void app.whenReady().then(() => {
   startRuntime()
   pushInitialConfig()
   ipcMain.handle('rpc', (_event, req: RpcRequest) => rpc(req))
+  ipcMain.handle('quick-capture-close', (event) => {
+    if (event.sender !== quickWin?.webContents) throw new Error('无效的快速输入请求')
+    quickWin.hide()
+  })
+  ipcMain.handle('quick-capture-open', (event) => {
+    if (event.sender !== win?.webContents) throw new Error('无效的快速输入请求')
+    showQuickCapture()
+  })
   ipcMain.handle('reveal', (_event, path: string) => {
     shell.showItemInFolder(path)
   })
@@ -373,9 +424,10 @@ void app.whenReady().then(() => {
   })
   createWindow()
   createTray()
-  globalShortcut.register(GLOBAL_SHORTCUT, () => showOrCreateWindow())
+  globalShortcut.register(GLOBAL_SHORTCUT, () => showQuickCapture())
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (!win) createWindow()
+    else showOrCreateWindow()
   })
 })
 
@@ -388,5 +440,6 @@ app.on('will-quit', () => {
 })
 
 app.on('before-quit', () => {
+  quickWin?.destroy()
   runtime?.kill()
 })
