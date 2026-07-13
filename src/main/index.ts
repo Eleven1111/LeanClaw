@@ -15,6 +15,7 @@ import {
 } from 'electron'
 import type { UtilityProcess } from 'electron'
 import { writeFile } from 'fs/promises'
+import { existsSync } from 'fs'
 import { join } from 'path'
 import { suggestedExportName } from '../shared/markdown'
 import type {
@@ -68,8 +69,14 @@ import {
   upsertProvider
 } from './settings'
 import { buildTrayIconDataURL } from './trayIcon'
+import { appIconCandidates } from './appIcon'
 
 const GLOBAL_SHORTCUT = 'Alt+Space'
+
+function appIconPath(): string {
+  const candidates = appIconCandidates(app.getAppPath(), __dirname)
+  return candidates.find((candidate) => existsSync(candidate)) ?? candidates[0]
+}
 
 if (process.env.LEANCLAW_DATA_DIR) {
   app.setPath('userData', process.env.LEANCLAW_DATA_DIR)
@@ -269,6 +276,7 @@ function createWindow(): void {
     minWidth: 900,
     minHeight: 600,
     title: 'LeanClaw',
+    icon: appIconPath(),
     titleBarStyle: 'hiddenInset',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -290,6 +298,7 @@ function createWindow(): void {
 }
 
 void app.whenReady().then(() => {
+  if (process.platform === 'darwin' && app.dock && existsSync(appIconPath())) app.dock.setIcon(appIconPath())
   startRuntime()
   pushInitialConfig()
   ipcMain.handle('rpc', (_event, req: RpcRequest) => rpc(req))

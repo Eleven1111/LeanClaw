@@ -3,6 +3,7 @@ import type { InternalStatus, RpcRequest, TaskView, UserStatus } from '../../sha
 import { StatusChip } from './TaskWorkspace'
 import { calculateVirtualWindow } from '../../shared/virtual-list'
 import { actionPhrase } from '../../shared/progress'
+import { EmptyState } from './EmptyState'
 
 export type TaskFilter = 'All' | 'Running' | 'NeedYou' | 'Delivered' | 'Blocked' | 'Cancelled' | 'Archived'
 
@@ -242,7 +243,7 @@ export function Tasks({
           )}
 
           {filtered.length === 0 ? (
-            <p className="muted">没有符合条件的任务。</p>
+            <EmptyState title="没有符合条件的任务" detail="切换筛选条件，或回到 Home 发起一个新任务。" />
           ) : (
             <TaskRows tasks={filtered} onOpen={onOpenTask} onAction={runAction} />
           )}

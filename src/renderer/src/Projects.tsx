@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { ProjectView, TaskView } from '../../shared/types'
+import { EmptyState } from './EmptyState'
 
 const EMPTY = { name: '', description: '', savedInstructions: '' }
 
@@ -51,7 +52,7 @@ export function Projects({ tasks, onOpenTask }: { tasks: TaskView[]; onOpenTask:
       <div className="actions"><button className="primary" disabled={!form.name.trim()} onClick={() => void save()}>保存</button><button onClick={() => setEditing(false)}>取消</button></div>
     </section>}
     <div className="project-layout">
-      <div className="project-list">{projects.length === 0 ? <p className="muted">还没有项目。</p> : projects.map((project) => <button key={project.id} className={`grid-card ${selectedId === project.id ? 'active' : ''}`} onClick={() => { setSelectedId(project.id); setEditing(false) }}><strong>{project.name}</strong><span className="muted">{project.taskCount} 个任务 · {project.deliverableCount} 个交付物</span></button>)}</div>
+      <div className="project-list">{projects.length === 0 ? <EmptyState title="还没有项目" detail="创建一个人工容器，为相关任务固定保存指令。" /> : projects.map((project) => <button key={project.id} className={`grid-card ${selectedId === project.id ? 'active' : ''}`} onClick={() => { setSelectedId(project.id); setEditing(false) }}><strong>{project.name}</strong><span className="muted">{project.taskCount} 个任务 · {project.deliverableCount} 个交付物</span></button>)}</div>
       {selected && <section className="card project-detail"><div className="section-head"><div><h2>{selected.name}</h2><p className="muted">{selected.description || '无说明'}</p></div><div className="actions"><button onClick={() => begin(selected)}>编辑</button><button disabled={selected.taskCount > 0} onClick={() => void remove()}>删除</button></div></div><h3>Saved Instructions</h3><pre>{selected.savedInstructions || '无'}</pre><h3>关联任务</h3>{linkedTasks.length === 0 ? <p className="muted">尚无关联任务</p> : linkedTasks.map((task) => <button className="task-row" key={task.id} onClick={() => onOpenTask(task.id)}><span className="task-goal">{task.goal}</span><span>{task.userStatus}</span></button>)}</section>}
     </div>
   </div>

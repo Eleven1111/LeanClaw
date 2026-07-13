@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { RunDetailView, TaskView } from '../../shared/types'
 import { StatusChip, STEP_ICON } from './TaskWorkspace'
+import { EmptyState } from './EmptyState'
 
 const KIND_LABEL: Record<string, string> = {
   tool: 'Tool',
@@ -47,7 +48,7 @@ function TaskPicker({
         </div>
       </div>
       {tasks.length === 0 ? (
-        <p className="muted">还没有任务。</p>
+        <EmptyState title="还没有可检查的 Run" detail="任务开始执行后，完整步骤、调用和事件会出现在这里。" />
       ) : (
         <div>
           {tasks.map((t) => (

@@ -3,6 +3,8 @@ import type { DeliverableDetailView, DeliverableView } from '../../shared/types'
 import { parseEvidenceLocator } from '../../shared/verify'
 import { RichDeliverablePreview } from './RichDeliverablePreview'
 import { VersionCompare } from './VersionCompare'
+import { EmptyState } from './EmptyState'
+import { Presence } from './Presence'
 
 export function Deliverables({
   onOpenTask
@@ -74,7 +76,7 @@ export function Deliverables({
       {loading ? (
         <p className="muted">加载中…</p>
       ) : items.length === 0 ? (
-        <p className="muted">还没有交付物。回到 Home 发起一个任务。</p>
+        <EmptyState title="还没有交付物" detail="回到 Home 发起任务，经过验证的成果会集中出现在这里。" />
       ) : (
         <div className="card-grid">
           {items.map((d) => (
@@ -139,7 +141,9 @@ export function Deliverables({
           )}
         </section>
       )}
-      {selected && compareOpen && <VersionCompare artifactId={selected.id} onClose={() => setCompareOpen(false)} />}
+      <Presence show={Boolean(selected && compareOpen)}>
+        {selected && <VersionCompare artifactId={selected.id} onClose={() => setCompareOpen(false)} />}
+      </Presence>
     </div>
   )
 }

@@ -4,6 +4,7 @@ import { parseEvidenceLocator } from '../../shared/verify'
 import { RichDeliverablePreview } from './RichDeliverablePreview'
 import { VersionCompare } from './VersionCompare'
 import { actionPhrase, formatDurationReference } from '../../shared/progress'
+import { Presence } from './Presence'
 
 const BRIEF_EDITABLE_STATUSES: InternalStatus[] = [
   'draft',
@@ -299,7 +300,7 @@ export function TaskWorkspace({
         </section>
       )}
 
-      {openAndon && (
+      <Presence show={Boolean(openAndon)}>{openAndon && (
         <section className="card andon">
           <h3>需要你处理</h3>
           <p>{openAndon.reason}</p>
@@ -337,9 +338,9 @@ export function TaskWorkspace({
             </div>
           )}
         </section>
-      )}
+      )}</Presence>
 
-      {pendingApproval && (
+      <Presence show={Boolean(pendingApproval)}>{pendingApproval && (
         <section className="card approval">
           <h3>待批准：{pendingApproval.actionDesc}</h3>
           <pre className="diff">{pendingApproval.diff}</pre>
@@ -361,7 +362,7 @@ export function TaskWorkspace({
             </button>
           </div>
         </section>
-      )}
+      )}</Presence>
 
       {task.status === 'verification_failed' && (
         <section className="card blocked">
@@ -432,9 +433,9 @@ export function TaskWorkspace({
               )}
             </section>
           )}
-          {deliverable && compareOpen && (
+          <Presence show={Boolean(deliverable && compareOpen)}>{deliverable && (
             <VersionCompare artifactId={deliverable.id} onClose={() => setCompareOpen(false)} />
-          )}
+          )}</Presence>
 
           {isReviewState && (
             <section className="card review">

@@ -231,6 +231,49 @@ kbd {
   padding: 18px 12px;
 }
 
+.empty-state {
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+  padding: 34px 18px;
+  border: 1px dashed var(--border);
+  border-radius: 14px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.empty-state strong { color: var(--text); font-size: 14px; }
+.empty-state p { max-width: 360px; line-height: 1.5; }
+
+.empty-state-mark {
+  width: 52px;
+  height: 36px;
+  position: relative;
+}
+
+.empty-state-mark span {
+  position: absolute;
+  left: 5px;
+  right: 5px;
+  height: 7px;
+  border: 2px solid var(--accent);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.empty-state-mark span:nth-child(1) { top: 0; opacity: 0.35; }
+.empty-state-mark span:nth-child(2) { top: 12px; opacity: 0.65; }
+.empty-state-mark span:nth-child(3) { top: 24px; }
+
+.presence-exit {
+  pointer-events: none;
+  animation: presence-out 180ms var(--ease-in-out) forwards;
+}
+
+@keyframes presence-out {
+  to { opacity: 0; transform: translateY(-4px) scale(0.99); }
+}
+
 .content-area {
   flex: 1;
   min-width: 0;
@@ -1421,6 +1464,7 @@ button.ghost.small {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .presence-exit { animation-duration: 1ms; }
   .refine-bar {
     transition-property: opacity;
     transform: none;
