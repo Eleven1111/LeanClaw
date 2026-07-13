@@ -319,6 +319,14 @@ export interface DeliverableHistoryView {
   versions: DeliverableVersionView[]
 }
 
+export interface DataGovernanceStats {
+  liveEventRows: number
+  archivedEventRows: number
+  archivedTaskCount: number
+  snapshotCount: number
+  snapshotBytes: number
+}
+
 export interface RunToolCallDetail {
   id: string
   toolId: string
@@ -404,6 +412,7 @@ export type RpcRequest =
   | { method: 'listDeliverables' }
   | { method: 'getDeliverable'; artifactId: string }
   | { method: 'getDeliverableHistory'; artifactId: string }
+  | { method: 'getDataGovernanceStats' }
   | { method: 'getRunDetail'; taskId: string }
   | { method: 'savePreset'; name: string; goal: string; recipeId: string; inputPath: string }
   | { method: 'listPresets' }
@@ -438,6 +447,7 @@ export interface SettingsView {
   encryptionAvailable: boolean
   maxActiveTasks: number
   defaultBudgetUsd: number
+  snapshotQuotaMb: number
   shellEnabled: boolean
   shellAllowPrefixes: string[]
 }

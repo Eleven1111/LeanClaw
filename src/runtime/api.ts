@@ -1,5 +1,7 @@
-import { getDb, getSamplePath, now, uid } from './db'
-import { appendEvent } from './ledger'
+import { getDataDir, getDb, getSamplePath, now, uid } from './db'
+import { existsSync, readdirSync, statSync } from 'fs'
+import { join } from 'path'
+import { appendEvent, archiveTaskEvents } from './ledger'
 import { getStatus, transition } from './state'
 import { buildRunDetail, buildTaskView, listTaskViews, publishTask } from './views'
 import { getActiveRun } from './engine'
@@ -16,6 +18,7 @@ import type {
   DeliverableView,
   DeliverableDetailView,
   DeliverableHistoryView,
+  DataGovernanceStats,
   InternalStatus,
   PresetView,
   ProjectView,
@@ -86,6 +89,8 @@ export async function handleRpc(req: RpcRequest): Promise<unknown> {
       return getDeliverable(req.artifactId)
     case 'getDeliverableHistory':
       return getDeliverableHistory(req.artifactId)
+    case 'getDataGovernanceStats':
+      return getDataGovernanceStats()
     case 'getRunDetail':
       return getRunDetail(req.taskId)
     case 'savePreset':
@@ -276,6 +281,24 @@ function getDeliverableHistory(artifactId: string): DeliverableHistoryView {
   return {
     ...selected,
     versions: versions.map((version) => ({ ...version, content: String(version.content ?? '') }))
+  }
+}
+
+function getDataGovernanceStats(): DataGovernanceStats {
+  const counts = getDb().prepare(
+    `SELECT
+       (SELECT COUNT(*) FROM run_events) as liveEventRows,
+       (SELECT COUNT(*) FROM run_events_archive) as archivedEventRows,
+       (SELECT COUNT(*) FROM tasks WHERE status = 'archived') as archivedTaskCount`
+  ).get() as Pick<DataGovernanceStats, 'liveEventRows' | 'archivedEventRows' | 'archivedTaskCount'>
+  const root = join(getDataDir(), 'snapshots')
+  const snapshots = existsSync(root)
+    ? readdirSync(root, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith('.html'))
+    : []
+  return {
+    ...counts,
+    snapshotCount: snapshots.length,
+    snapshotBytes: snapshots.reduce((total, entry) => total + statSync(join(root, entry.name)).size, 0)
   }
 }
 
@@ -804,6 +827,7 @@ function refineTask(taskId: string, instruction: string): TaskView {
 function archiveTask(taskId: string): TaskView {
   transition(taskId, 'archived')
   appendEvent(taskId, 'task-archived')
+  archiveTaskEvents(taskId)
   return buildTaskView(taskId)
 }
 
@@ -814,6 +838,7 @@ function archiveAllDelivered(): { count: number } {
   for (const row of rows) {
     transition(row.id, 'archived')
     appendEvent(row.id, 'task-archived')
+    archiveTaskEvents(row.id)
   }
   return { count: rows.length }
 }

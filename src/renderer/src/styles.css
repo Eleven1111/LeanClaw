@@ -1070,6 +1070,15 @@ button.ghost.small {
   flex-direction: column;
 }
 
+.virtual-task-list {
+  height: 576px;
+  overflow-y: auto;
+}
+
+.virtual-task-list .task-row {
+  height: 56px;
+}
+
 .task-row-main {
   display: flex;
   align-items: center;

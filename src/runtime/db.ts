@@ -142,6 +142,16 @@ CREATE TABLE IF NOT EXISTS run_events (
   payload TEXT,
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS run_events_archive (
+  original_seq INTEGER PRIMARY KEY,
+  task_id TEXT NOT NULL,
+  run_id TEXT,
+  step_id TEXT,
+  type TEXT NOT NULL,
+  payload TEXT,
+  created_at TEXT NOT NULL,
+  archived_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS task_presets (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -314,6 +324,21 @@ export const MIGRATIONS: Migration[] = [
       if (!hasColumn(database, 'tasks', 'schedule_id')) {
         database.exec('ALTER TABLE tasks ADD COLUMN schedule_id TEXT')
       }
+    }
+  },
+  {
+    version: 8,
+    up(database) {
+      database.exec(`CREATE TABLE IF NOT EXISTS run_events_archive (
+        original_seq INTEGER PRIMARY KEY,
+        task_id TEXT NOT NULL,
+        run_id TEXT,
+        step_id TEXT,
+        type TEXT NOT NULL,
+        payload TEXT,
+        created_at TEXT NOT NULL,
+        archived_at TEXT NOT NULL
+      )`)
     }
   }
 ]

@@ -40,6 +40,7 @@ export interface RuntimeConfig {
   model: string
   maxActiveTasks: number
   defaultBudgetUsd: number
+  snapshotQuotaMb: number
   providers: ProviderConfig[]
   defaultProviderId: string | null
   tierMap: TierMap
@@ -54,6 +55,7 @@ export interface RuntimeConfigOverride {
   model?: string
   maxActiveTasks?: number
   defaultBudgetUsd?: number
+  snapshotQuotaMb?: number
   providers?: ProviderConfig[]
   defaultProviderId?: string | null
   tierMap?: TierMap
@@ -65,6 +67,7 @@ export interface RuntimeConfigOverride {
 
 export const DEFAULT_MODEL = 'claude-sonnet-5'
 export const DEFAULT_MAX_ACTIVE_TASKS = 3
+export const DEFAULT_SNAPSHOT_QUOTA_MB = 250
 
 function normalizePositiveInt(v: number | undefined): number | undefined {
   if (v === undefined || !Number.isFinite(v)) return undefined
@@ -191,6 +194,7 @@ export function resolveConfig(
     normalizePositiveInt(envMaxActive !== undefined ? Number(envMaxActive) : undefined) ??
     DEFAULT_MAX_ACTIVE_TASKS
   const defaultBudgetUsd = normalizeNonNegative(override.defaultBudgetUsd) ?? 0
+  const snapshotQuotaMb = normalizePositiveInt(override.snapshotQuotaMb) ?? DEFAULT_SNAPSHOT_QUOTA_MB
   const providers = override.providers ?? parseProvidersEnv(envProviders) ?? []
   const defaultProviderId =
     'defaultProviderId' in override ? override.defaultProviderId ?? null : null
@@ -204,6 +208,7 @@ export function resolveConfig(
     model,
     maxActiveTasks,
     defaultBudgetUsd,
+    snapshotQuotaMb,
     providers,
     defaultProviderId,
     tierMap,

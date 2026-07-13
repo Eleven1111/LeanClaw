@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('api', {
   setModel: (model: string) => ipcRenderer.invoke('settings-set-model', model),
   setMaxActiveTasks: (value: number) => ipcRenderer.invoke('settings-set-max-active', value),
   setDefaultBudget: (value: number) => ipcRenderer.invoke('settings-set-default-budget', value),
+  setSnapshotQuota: (value: number) => ipcRenderer.invoke('settings-set-snapshot-quota', value),
   setShellEnabled: (value: boolean) => ipcRenderer.invoke('settings-set-shell-enabled', value),
   setShellAllowPrefixes: (value: string[]) =>
     ipcRenderer.invoke('settings-set-shell-allow-prefixes', value),

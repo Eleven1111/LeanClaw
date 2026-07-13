@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto'
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { validateMcpServerInput, validateProvider } from '../shared/verify'
+import { normalizeSnapshotQuotaMb } from '../shared/governance'
 import { parseMcpToolId } from '../shared/mcp'
 import type {
   McpServerUpsertInput,
@@ -25,6 +26,7 @@ import type {
 
 const DEFAULT_MODEL = 'claude-sonnet-5'
 const DEFAULT_MAX_ACTIVE_TASKS = 3
+const DEFAULT_SNAPSHOT_QUOTA_MB = 250
 const KEY_MAX_LENGTH = 512
 const MODEL_MAX_LENGTH = 128
 
@@ -50,6 +52,7 @@ interface ConfigFile {
   model?: string
   maxActiveTasks?: number
   defaultBudgetUsd?: number
+  snapshotQuotaMb?: number
   providers?: StoredProvider[]
   defaultProviderId?: string | null
   tierMap?: TierMap
@@ -153,6 +156,10 @@ export function readDefaultBudgetUsd(): number {
   return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0
 }
 
+export function readSnapshotQuotaMb(): number {
+  return normalizeSnapshotQuotaMb(Number(readConfig().snapshotQuotaMb)) ?? DEFAULT_SNAPSHOT_QUOTA_MB
+}
+
 function readStoredProviders(): StoredProvider[] {
   const list = readConfig().providers
   return Array.isArray(list) ? list : []
@@ -205,9 +212,17 @@ export function getSettings(): SettingsView {
     encryptionAvailable: safeStorage.isEncryptionAvailable(),
     maxActiveTasks: readMaxActiveTasks(),
     defaultBudgetUsd: readDefaultBudgetUsd(),
+    snapshotQuotaMb: readSnapshotQuotaMb(),
     shellEnabled: readShellEnabled(),
     shellAllowPrefixes: readShellAllowPrefixes()
   }
+}
+
+export function setSnapshotQuotaMb(value: unknown): SettingsView {
+  const normalized = normalizeSnapshotQuotaMb(Number(value))
+  if (normalized === null) throw new Error('快照配额必须是 10–10000 MB 的整数')
+  writeConfig({ snapshotQuotaMb: normalized })
+  return getSettings()
 }
 
 export function setShellEnabled(value: unknown): SettingsView {

@@ -1,12 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import type { InternalStatus, RpcRequest, TaskView, UserStatus } from '../../shared/types'
 import { StatusChip } from './TaskWorkspace'
+import { calculateVirtualWindow } from '../../shared/virtual-list'
 
 export type TaskFilter = 'All' | 'Running' | 'NeedYou' | 'Delivered' | 'Blocked' | 'Cancelled' | 'Archived'
 
 type ViewMode = 'list' | 'board'
 
 const ARCHIVE_CONFIRM_MS = 3000
+const VIRTUALIZE_AFTER = 100
+const VIRTUAL_ROW_HEIGHT = 64
+const VIRTUAL_VIEWPORT_HEIGHT = 576
 
 const ARCHIVABLE_STATUSES: InternalStatus[] = [
   'delivered',
@@ -102,6 +106,33 @@ function KanbanCard({ t, onOpen }: { t: TaskView; onOpen: (id: string) => void }
       <div className="kanban-card-step muted">{currentStepPhrase(t)}</div>
       {t.queuePosition !== null && <span className="queue-badge">第 {t.queuePosition} 位</span>}
     </button>
+  )
+}
+
+function TaskRows({
+  tasks,
+  onOpen,
+  onAction
+}: {
+  tasks: TaskView[]
+  onOpen: (id: string) => void
+  onAction: (req: RpcRequest) => void
+}): React.JSX.Element {
+  const [scrollTop, setScrollTop] = useState(0)
+  if (tasks.length <= VIRTUALIZE_AFTER) {
+    return <div className="task-rows">{tasks.map((task) => <TaskListRow key={task.id} t={task} onOpen={onOpen} onAction={onAction} />)}</div>
+  }
+  const virtualWindow = calculateVirtualWindow(tasks.length, VIRTUAL_ROW_HEIGHT, VIRTUAL_VIEWPORT_HEIGHT, scrollTop, 4)
+  return (
+    <div
+      className="task-rows virtual-task-list"
+      data-total-count={tasks.length}
+      onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
+    >
+      <div style={{ height: virtualWindow.paddingTop }} aria-hidden="true" />
+      {tasks.slice(virtualWindow.start, virtualWindow.end).map((task) => <TaskListRow key={task.id} t={task} onOpen={onOpen} onAction={onAction} />)}
+      <div style={{ height: virtualWindow.paddingBottom }} aria-hidden="true" />
+    </div>
   )
 }
 
@@ -212,11 +243,7 @@ export function Tasks({
           {filtered.length === 0 ? (
             <p className="muted">没有符合条件的任务。</p>
           ) : (
-            <div className="task-rows">
-              {filtered.map((t) => (
-                <TaskListRow key={t.id} t={t} onOpen={onOpenTask} onAction={runAction} />
-              ))}
-            </div>
+            <TaskRows tasks={filtered} onOpen={onOpenTask} onAction={runAction} />
           )}
         </>
       ) : (

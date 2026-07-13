@@ -1,7 +1,10 @@
 import { ToolError, type ToolDefinition } from './tool-types'
 import { createHash } from 'crypto'
-import { mkdirSync, writeFileSync } from 'fs'
+import { mkdirSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'fs'
 import { join } from 'path'
+import { getDb } from './db'
+import { getRuntimeConfig } from './config'
+import { selectSnapshotDeletions } from '../shared/governance'
 
 const MAX_BODY_BYTES = 2 * 1024 * 1024
 const FETCH_TIMEOUT_MS = 15000
@@ -143,7 +146,30 @@ function persistSnapshot(url: string, html: string): string {
   mkdirSync(root, { recursive: true })
   const path = join(root, snapshotFileName(url, html))
   writeFileSync(path, html, 'utf8')
+  enforceSnapshotQuota(root, path)
   return path
+}
+
+function enforceSnapshotQuota(root: string, currentPath: string): void {
+  try {
+    const files = readdirSync(root, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && entry.name.endsWith('.html'))
+      .map((entry) => {
+        const path = join(root, entry.name)
+        const stat = statSync(path)
+        return { path, size: stat.size, modifiedMs: stat.mtimeMs }
+      })
+    const rows = getDb().prepare(
+      `SELECT local_path as path FROM artifacts
+       WHERE local_path IS NOT NULL AND local_path LIKE ?`
+    ).all(`${root}/%`) as { path: string }[]
+    const protectedPaths = new Set(rows.map((row) => row.path))
+    protectedPaths.add(currentPath)
+    const quotaBytes = getRuntimeConfig().snapshotQuotaMb * 1024 * 1024
+    for (const path of selectSnapshotDeletions(files, quotaBytes, protectedPaths)) unlinkSync(path)
+  } catch (error) {
+    console.warn('快照配额清理失败:', (error as Error).message)
+  }
 }
 
 export const webFetchTool: ToolDefinition = {

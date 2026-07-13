@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { SettingsView } from '../../shared/types'
+import type { DataGovernanceStats, SettingsView } from '../../shared/types'
 import { McpSettings } from './McpSettings'
 import { ModelRoutingSettings } from './ModelRoutingSettings'
 import { ProvidersSettings } from './ProvidersSettings'
@@ -25,6 +25,11 @@ export function Settings({ onBack }: { onBack: () => void }): React.JSX.Element 
   const [budgetBusy, setBudgetBusy] = useState(false)
   const [budgetError, setBudgetError] = useState('')
   const [budgetSaved, setBudgetSaved] = useState(false)
+  const [snapshotQuotaDraft, setSnapshotQuotaDraft] = useState('250')
+  const [snapshotQuotaBusy, setSnapshotQuotaBusy] = useState(false)
+  const [snapshotQuotaError, setSnapshotQuotaError] = useState('')
+  const [snapshotQuotaSaved, setSnapshotQuotaSaved] = useState(false)
+  const [governanceStats, setGovernanceStats] = useState<DataGovernanceStats | null>(null)
   const [shellEnabled, setShellEnabledValue] = useState(false)
   const [shellEnabledBusy, setShellEnabledBusy] = useState(false)
   const [shellEnabledError, setShellEnabledError] = useState('')
@@ -44,12 +49,14 @@ export function Settings({ onBack }: { onBack: () => void }): React.JSX.Element 
     }
     setMaxActiveDraft(String(s.maxActiveTasks))
     setBudgetDraft(String(s.defaultBudgetUsd))
+    setSnapshotQuotaDraft(String(s.snapshotQuotaMb))
     setShellEnabledValue(s.shellEnabled)
     setShellAllowDraft(s.shellAllowPrefixes.join('\n'))
   }
 
   useEffect(() => {
     void window.api.getSettings().then(applySettings)
+    void window.api.rpc({ method: 'getDataGovernanceStats' }).then((result) => setGovernanceStats(result as DataGovernanceStats))
   }, [])
 
   const saveKey = async (): Promise<void> => {
@@ -118,6 +125,20 @@ export function Settings({ onBack }: { onBack: () => void }): React.JSX.Element 
       setBudgetError((e as Error).message)
     } finally {
       setBudgetBusy(false)
+    }
+  }
+
+  const saveSnapshotQuota = async (): Promise<void> => {
+    setSnapshotQuotaBusy(true)
+    setSnapshotQuotaError('')
+    setSnapshotQuotaSaved(false)
+    try {
+      applySettings(await window.api.setSnapshotQuota(Number(snapshotQuotaDraft)))
+      setSnapshotQuotaSaved(true)
+    } catch (e) {
+      setSnapshotQuotaError((e as Error).message)
+    } finally {
+      setSnapshotQuotaBusy(false)
     }
   }
 
@@ -346,6 +367,38 @@ export function Settings({ onBack }: { onBack: () => void }): React.JSX.Element 
             {budgetSaved && <span className="meta">已保存</span>}
           </div>
           {budgetError && <div className="error">{budgetError}</div>}
+        </div>
+      </section>
+
+      <section>
+        <h2>来源快照配额（MB）</h2>
+        <div className="input-card">
+          <p className="sub">达到配额时只清理最旧且未被 Evidence 引用的 HTML 快照。</p>
+          <div className="input-row">
+            <input
+              aria-label="来源快照配额"
+              type="number"
+              min={10}
+              max={10000}
+              step={1}
+              value={snapshotQuotaDraft}
+              onChange={(e) => {
+                setSnapshotQuotaDraft(e.target.value)
+                setSnapshotQuotaSaved(false)
+              }}
+            />
+            <button className="primary" disabled={snapshotQuotaBusy || !snapshotQuotaDraft.trim()} onClick={() => void saveSnapshotQuota()}>
+              {snapshotQuotaBusy ? '保存中…' : '保存'}
+            </button>
+            {snapshotQuotaSaved && <span className="meta">已保存</span>}
+          </div>
+          {snapshotQuotaError && <div className="error">{snapshotQuotaError}</div>}
+          {governanceStats && (
+            <p className="meta governance-stats">
+              快照 {governanceStats.snapshotCount} 个 · {(governanceStats.snapshotBytes / 1024 / 1024).toFixed(2)} MB<br />
+              活跃事件 {governanceStats.liveEventRows} 行 · 已归档事件 {governanceStats.archivedEventRows} 行 · 已归档任务 {governanceStats.archivedTaskCount} 个
+            </p>
+          )}
         </div>
       </section>
 

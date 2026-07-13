@@ -51,6 +51,7 @@ import {
   readProvidersForRuntime,
   readShellAllowPrefixes,
   readShellEnabled,
+  readSnapshotQuotaMb,
   readTierMap,
   setDefaultBudget,
   setDefaultProvider,
@@ -61,6 +62,7 @@ import {
   setProviderKey,
   setShellAllowPrefixes,
   setShellEnabled,
+  setSnapshotQuotaMb,
   setTierRoute,
   upsertMcpServer,
   upsertProvider
@@ -204,6 +206,7 @@ function pushConfig(patch: {
   model?: string
   maxActiveTasks?: number
   defaultBudgetUsd?: number
+  snapshotQuotaMb?: number
   providers?: ProviderConfig[]
   defaultProviderId?: string | null
   tierMap?: TierMap
@@ -235,6 +238,7 @@ function pushInitialConfig(): void {
     model: readModel(),
     maxActiveTasks: readMaxActiveTasks(),
     defaultBudgetUsd: readDefaultBudgetUsd(),
+    snapshotQuotaMb: readSnapshotQuotaMb(),
     providers: readProvidersForRuntime(),
     defaultProviderId: readDefaultProviderId(),
     tierMap: readTierMap(),
@@ -357,6 +361,11 @@ void app.whenReady().then(() => {
   ipcMain.handle('settings-set-default-budget', (_event, value: number) => {
     const settings = setDefaultBudget(value)
     pushConfig({ defaultBudgetUsd: readDefaultBudgetUsd() })
+    return settings
+  })
+  ipcMain.handle('settings-set-snapshot-quota', (_event, value: number) => {
+    const settings = setSnapshotQuotaMb(value)
+    pushConfig({ snapshotQuotaMb: readSnapshotQuotaMb() })
     return settings
   })
   ipcMain.handle('settings-set-shell-enabled', (_event, value: boolean) => {

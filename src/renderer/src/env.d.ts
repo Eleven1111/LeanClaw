@@ -34,6 +34,7 @@ declare global {
       setModel(model: string): Promise<SettingsView>
       setMaxActiveTasks(value: number): Promise<SettingsView>
       setDefaultBudget(value: number): Promise<SettingsView>
+      setSnapshotQuota(value: number): Promise<SettingsView>
       setShellEnabled(value: boolean): Promise<SettingsView>
       setShellAllowPrefixes(value: string[]): Promise<SettingsView>
       getProviders(): Promise<ProvidersView>

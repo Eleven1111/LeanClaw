@@ -68,7 +68,11 @@ export function buildTaskView(taskId: string): TaskView {
         )
         .get(run.id) as any)
     : { c: 0 }
-  const ev = db.prepare('SELECT COUNT(*) c FROM run_events WHERE task_id = ?').get(taskId) as any
+  const ev = db.prepare(
+    `SELECT
+       (SELECT COUNT(*) FROM run_events WHERE task_id = ? AND type != 'events-archived') +
+       (SELECT COUNT(*) FROM run_events_archive WHERE task_id = ?) c`
+  ).get(taskId, taskId) as any
   const retries = steps.reduce((n, s) => n + Math.max(0, (s.attempt ?? 0) - 1), 0)
   const interventions =
     approvals.filter((a) => a.status !== 'pending').length +

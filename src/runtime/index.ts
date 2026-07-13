@@ -25,11 +25,14 @@ type ParentMessage =
       model?: string
       maxActiveTasks?: number
       defaultBudgetUsd?: number
+      snapshotQuotaMb?: number
       providers?: ProviderConfig[]
       defaultProviderId?: string | null
       tierMap?: TierMap
       mcpServers?: McpServerRuntimeConfig[]
       mcpToolRisk?: McpToolRiskMap
+      shellEnabled?: boolean
+      shellAllowPrefixes?: string[]
     }
 
 interface ParentPort {
@@ -63,11 +66,14 @@ if (parentPort) {
       if (msg.model !== undefined) patch.model = msg.model
       if (msg.maxActiveTasks !== undefined) patch.maxActiveTasks = msg.maxActiveTasks
       if (msg.defaultBudgetUsd !== undefined) patch.defaultBudgetUsd = msg.defaultBudgetUsd
+      if (msg.snapshotQuotaMb !== undefined) patch.snapshotQuotaMb = msg.snapshotQuotaMb
       if (msg.providers !== undefined) patch.providers = msg.providers
       if ('defaultProviderId' in msg) patch.defaultProviderId = msg.defaultProviderId ?? null
       if (msg.tierMap !== undefined) patch.tierMap = msg.tierMap
       if (msg.mcpServers !== undefined) patch.mcpServers = msg.mcpServers
       if (msg.mcpToolRisk !== undefined) patch.mcpToolRisk = msg.mcpToolRisk
+      if (msg.shellEnabled !== undefined) patch.shellEnabled = msg.shellEnabled
+      if (msg.shellAllowPrefixes !== undefined) patch.shellAllowPrefixes = msg.shellAllowPrefixes
       setRuntimeConfig(patch)
       if (msg.mcpServers !== undefined || msg.mcpToolRisk !== undefined) syncMcpFromConfig()
       return
