@@ -812,6 +812,9 @@ button.link {
 .project-detail { min-height: 240px; }
 .project-detail pre { background: var(--bg); border-radius: 8px; padding: 12px; user-select: text; white-space: pre-wrap; }
 .project-detail .task-row { width: 100%; }
+.rule-sets { margin-top: 28px; }
+.rule-form { display: grid; gap: 10px; margin-bottom: 16px; }
+.rule-lengths { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 
 .budget-input {
   width: auto;

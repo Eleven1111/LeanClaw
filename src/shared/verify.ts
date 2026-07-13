@@ -147,6 +147,30 @@ export interface ContentRules {
   minLength: number
   maxLength: number
   mustStartWith: string
+  requiredHeadings?: string[]
+}
+
+export interface RuleSetInput extends ContentRules { name: string }
+export type RuleSetValidationResult =
+  | { ok: true; value: RuleSetInput }
+  | { ok: false; detail: string }
+
+export function validateRuleSetInput(input: RuleSetInput): RuleSetValidationResult {
+  const name = input.name.trim()
+  if (!name) return { ok: false, detail: '规则集名称不能为空' }
+  if (name.length > 80) return { ok: false, detail: '规则集名称不能超过 80 字符' }
+  if (!Number.isInteger(input.minLength) || input.minLength < 0) return { ok: false, detail: '最小长度必须是非负整数' }
+  if (!Number.isInteger(input.maxLength) || input.maxLength < input.minLength) return { ok: false, detail: '最大长度必须不小于最小长度' }
+  if (input.maxLength > 1_000_000) return { ok: false, detail: '最大长度不能超过 1000000' }
+  const normalize = (items: string[]): string[] => [...new Set(items.map((item) => item.trim()).filter(Boolean))]
+  return { ok: true, value: {
+    name,
+    bannedWords: normalize(input.bannedWords),
+    minLength: input.minLength,
+    maxLength: input.maxLength,
+    mustStartWith: input.mustStartWith,
+    requiredHeadings: normalize(input.requiredHeadings ?? [])
+  } }
 }
 
 export interface ContentRuleResult {
@@ -167,6 +191,9 @@ export function checkContentRules(text: string, rules: ContentRules): ContentRul
   }
   if (!text.startsWith(rules.mustStartWith)) {
     problems.push(`未以「${rules.mustStartWith}」开头`)
+  }
+  for (const heading of rules.requiredHeadings ?? []) {
+    if (!text.includes(heading)) problems.push(`缺少必含结构：${heading}`)
   }
   return { ok: problems.length === 0, problems }
 }

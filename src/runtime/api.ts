@@ -8,13 +8,14 @@ import { getRuntimeConfig } from './config'
 import { completeWith } from './model'
 import { getMcpStatus } from './mcp'
 import { fileEditRecipe, getRecipe, listRecipes } from './recipe'
-import { parseRefineInstructions, validatePresetInput, validateProjectInput } from '../shared/verify'
+import { parseRefineInstructions, validatePresetInput, validateProjectInput, validateRuleSetInput } from '../shared/verify'
 import type {
   DeliverableView,
   DeliverableDetailView,
   InternalStatus,
   PresetView,
   ProjectView,
+  RuleSetView,
   RecipeView,
   RpcRequest,
   RunDetailView,
@@ -101,6 +102,12 @@ export async function handleRpc(req: RpcRequest): Promise<unknown> {
       return saveProject(req.projectId, req.name, req.description, req.savedInstructions)
     case 'deleteProject':
       return deleteProject(req.projectId)
+    case 'listRuleSets':
+      return listRuleSets()
+    case 'saveRuleSet':
+      return saveRuleSet(req)
+    case 'deleteRuleSet':
+      return deleteRuleSet(req.ruleSetId)
   }
 }
 
@@ -332,6 +339,54 @@ function deleteProject(projectId: string): void {
   if (linked.count > 0) throw new Error('项目已有任务，不能删除')
   const result = db.prepare('DELETE FROM projects WHERE id = ?').run(projectId)
   if (result.changes !== 1) throw new Error('项目不存在')
+}
+
+function listRuleSets(): RuleSetView[] {
+  const rows = getDb().prepare(
+    `SELECT id, name, banned_words as bannedWords, min_length as minLength,
+            max_length as maxLength, must_start_with as mustStartWith,
+            required_headings as requiredHeadings, created_at as createdAt, updated_at as updatedAt
+     FROM rule_sets ORDER BY updated_at DESC`
+  ).all() as (Omit<RuleSetView, 'bannedWords' | 'requiredHeadings'> & { bannedWords: string; requiredHeadings: string })[]
+  return rows.map((row) => ({
+    ...row,
+    bannedWords: JSON.parse(row.bannedWords) as string[],
+    requiredHeadings: JSON.parse(row.requiredHeadings) as string[]
+  }))
+}
+
+function saveRuleSet(req: Extract<RpcRequest, { method: 'saveRuleSet' }>): RuleSetView {
+  const validation = validateRuleSetInput(req)
+  if (!validation.ok) throw new Error(validation.detail)
+  const value = validation.value
+  const id = req.ruleSetId ?? uid()
+  const timestamp = now()
+  try {
+    if (req.ruleSetId) {
+      const result = getDb().prepare(
+        `UPDATE rule_sets SET name=?, banned_words=?, min_length=?, max_length=?,
+         must_start_with=?, required_headings=?, updated_at=? WHERE id=?`
+      ).run(value.name, JSON.stringify(value.bannedWords), value.minLength, value.maxLength,
+        value.mustStartWith, JSON.stringify(value.requiredHeadings), timestamp, id)
+      if (result.changes !== 1) throw new Error('规则集不存在')
+    } else {
+      getDb().prepare(
+        `INSERT INTO rule_sets
+         (id,name,banned_words,min_length,max_length,must_start_with,required_headings,created_at,updated_at)
+         VALUES (?,?,?,?,?,?,?,?,?)`
+      ).run(id, value.name, JSON.stringify(value.bannedWords), value.minLength, value.maxLength,
+        value.mustStartWith, JSON.stringify(value.requiredHeadings), timestamp, timestamp)
+    }
+  } catch (error) {
+    if (String((error as Error).message).includes('UNIQUE')) throw new Error('规则集名称已存在')
+    throw error
+  }
+  return listRuleSets().find((rule) => rule.id === id) as RuleSetView
+}
+
+function deleteRuleSet(ruleSetId: string): void {
+  const result = getDb().prepare('DELETE FROM rule_sets WHERE id = ?').run(ruleSetId)
+  if (result.changes !== 1) throw new Error('规则集不存在')
 }
 
 function createTask(

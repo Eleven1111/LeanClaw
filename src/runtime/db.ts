@@ -158,6 +158,17 @@ CREATE TABLE IF NOT EXISTS projects (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS rule_sets (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  banned_words TEXT NOT NULL DEFAULT '[]',
+  min_length INTEGER NOT NULL DEFAULT 0,
+  max_length INTEGER NOT NULL DEFAULT 20000,
+  must_start_with TEXT NOT NULL DEFAULT '',
+  required_headings TEXT NOT NULL DEFAULT '[]',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS schema_version (
   version INTEGER NOT NULL
 );
@@ -222,6 +233,22 @@ export const MIGRATIONS: Migration[] = [
       if (!hasColumn(database, 'tasks', 'project_instructions_snapshot')) {
         database.exec('ALTER TABLE tasks ADD COLUMN project_instructions_snapshot TEXT')
       }
+    }
+  },
+  {
+    version: 5,
+    up(database) {
+      database.exec(`CREATE TABLE IF NOT EXISTS rule_sets (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        banned_words TEXT NOT NULL DEFAULT '[]',
+        min_length INTEGER NOT NULL DEFAULT 0,
+        max_length INTEGER NOT NULL DEFAULT 20000,
+        must_start_with TEXT NOT NULL DEFAULT '',
+        required_headings TEXT NOT NULL DEFAULT '[]',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )`)
     }
   }
 ]

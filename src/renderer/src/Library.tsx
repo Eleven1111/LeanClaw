@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { PresetView, RecipeView } from '../../shared/types'
+import { RuleSets } from './RuleSets'
 
 const DELETE_CONFIRM_MS = 3000
 
@@ -132,6 +133,7 @@ export function Library({
               </div>
             ))}
           </div>
+          <RuleSets />
         </>
       )}
     </div>

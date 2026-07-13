@@ -227,6 +227,18 @@ export interface ProjectView {
   updatedAt: string
 }
 
+export interface RuleSetView {
+  id: string
+  name: string
+  bannedWords: string[]
+  minLength: number
+  maxLength: number
+  mustStartWith: string
+  requiredHeadings: string[]
+  createdAt: string
+  updatedAt: string
+}
+
 export interface RecipeView {
   id: string
   title: string
@@ -359,6 +371,9 @@ export type RpcRequest =
   | { method: 'listProjects' }
   | { method: 'saveProject'; projectId?: string; name: string; description: string; savedInstructions: string }
   | { method: 'deleteProject'; projectId: string }
+  | { method: 'listRuleSets' }
+  | { method: 'saveRuleSet'; ruleSetId?: string; name: string; bannedWords: string[]; minLength: number; maxLength: number; mustStartWith: string; requiredHeadings: string[] }
+  | { method: 'deleteRuleSet'; ruleSetId: string }
 
 export interface PushEvent {
   type: 'task'
