@@ -67,12 +67,14 @@ export function RunInspector({
   taskId,
   tasks,
   onSelectTask,
-  onBackToTask
+  onBackToTask,
+  initialStepId
 }: {
   taskId: string | null
   tasks: TaskView[]
   onSelectTask: (id: string) => void
   onBackToTask: (taskId: string) => void
+  initialStepId: string | null
 }): React.JSX.Element {
   const [detail, setDetail] = useState<RunDetailView | null>(null)
   const [loading, setLoading] = useState(false)
@@ -93,6 +95,12 @@ export function RunInspector({
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false))
   }, [taskId])
+
+  useEffect(() => {
+    if (!detail || !initialStepId) return
+    setExpandedStepId(initialStepId)
+    window.setTimeout(() => document.getElementById(`run-step-${initialStepId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0)
+  }, [detail, initialStepId])
 
   if (!taskId) {
     return <TaskPicker tasks={tasks} onSelectTask={onSelectTask} />
@@ -132,7 +140,7 @@ export function RunInspector({
                 {detail.steps.map((s) => {
                   const expanded = expandedStepId === s.id
                   return (
-                    <li key={s.id} className={`run-step step-${s.status}`}>
+                    <li id={`run-step-${s.id}`} key={s.id} className={`run-step step-${s.status}`}>
                       <button
                         className="run-step-head"
                         onClick={() => setExpandedStepId(expanded ? null : s.id)}

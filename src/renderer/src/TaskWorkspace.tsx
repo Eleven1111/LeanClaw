@@ -3,6 +3,7 @@ import type { DeliverableDetailView, InternalStatus, RpcRequest, TaskView, UserS
 import { parseEvidenceLocator } from '../../shared/verify'
 import { RichDeliverablePreview } from './RichDeliverablePreview'
 import { VersionCompare } from './VersionCompare'
+import { actionPhrase, formatDurationReference } from '../../shared/progress'
 
 const BRIEF_EDITABLE_STATUSES: InternalStatus[] = [
   'draft',
@@ -54,7 +55,7 @@ export function TaskWorkspace({
 }: {
   task: TaskView
   onBack: () => void
-  onOpenInspector: (taskId: string) => void
+  onOpenInspector: (taskId: string, stepId?: string) => void
 }): React.JSX.Element {
   const [error, setError] = useState('')
   const [editingBrief, setEditingBrief] = useState(false)
@@ -389,9 +390,11 @@ export function TaskWorkspace({
             {task.steps.map((s) => (
               <li key={s.id} className={`step step-${s.status}`}>
                 <span className="icon">{STEP_ICON[s.status] ?? '○'}</span>
-                <span className="step-title">{s.title}</span>
+                <button aria-label={`查看步骤 ${s.idx + 1}`} className="step-title step-focus-link" onClick={() => onOpenInspector(task.id, s.id)}>{s.title}</button>
                 {s.attempt > 1 && <span className="retry">第 {s.attempt} 次尝试</span>}
                 {s.outputSummary && <span className="summary">{s.outputSummary}</span>}
+                {s.status === 'running' && <span className="step-action">{actionPhrase(s.title)}</span>}
+                {s.estimatedDurationMs !== null && <span className="step-estimate">历史中位 {formatDurationReference(s.estimatedDurationMs)}</span>}
               </li>
             ))}
           </ol>

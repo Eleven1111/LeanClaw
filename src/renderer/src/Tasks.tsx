@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { InternalStatus, RpcRequest, TaskView, UserStatus } from '../../shared/types'
 import { StatusChip } from './TaskWorkspace'
 import { calculateVirtualWindow } from '../../shared/virtual-list'
+import { actionPhrase } from '../../shared/progress'
 
 export type TaskFilter = 'All' | 'Running' | 'NeedYou' | 'Delivered' | 'Blocked' | 'Cancelled' | 'Archived'
 
@@ -61,7 +62,7 @@ function matchesFilter(t: TaskView, f: TaskFilter): boolean {
 function currentStepPhrase(t: TaskView): string {
   const runningStep = t.steps.find((s) => s.status === 'running')
   const lastDone = [...t.steps].reverse().find((s) => s.status === 'done')
-  return runningStep?.title ?? lastDone?.outputSummary ?? lastDone?.title ?? ''
+  return runningStep ? actionPhrase(runningStep.title) : lastDone?.outputSummary ?? lastDone?.title ?? ''
 }
 
 function TaskListRow({

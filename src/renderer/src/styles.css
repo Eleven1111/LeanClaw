@@ -656,6 +656,7 @@ button.link {
   gap: 10px;
   padding: 9px 4px;
   border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
 }
 
 .step .icon {
@@ -679,6 +680,30 @@ button.link {
 .step-title {
   font-weight: 500;
   flex-shrink: 0;
+}
+
+.step-focus-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+}
+
+.step-focus-link:hover { color: var(--accent); }
+
+.step-action {
+  flex-basis: 100%;
+  margin-left: 26px;
+  color: var(--accent);
+  font-size: 12px;
+}
+
+.step-estimate {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 11px;
 }
 
 .step .summary {

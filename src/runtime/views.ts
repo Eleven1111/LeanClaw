@@ -4,6 +4,7 @@ import { parseRefineInstructions } from '../shared/verify'
 import type { InternalStatus, RunDetailView, TaskView } from '../shared/types'
 import { publish } from './bus'
 import { getQueuePosition } from './scheduler'
+import { medianDurationMs } from '../shared/progress'
 
 export function buildTaskView(taskId: string): TaskView {
   const db = getDb()
@@ -52,6 +53,18 @@ export function buildTaskView(taskId: string): TaskView {
   const evidence = db
     .prepare('SELECT * FROM evidence WHERE task_id = ? ORDER BY created_at')
     .all(taskId) as any[]
+  const historicalDurations = db.prepare(
+    `SELECT s.idx, s.started_at, s.ended_at
+     FROM steps s JOIN runs r ON r.id = s.run_id
+     WHERE r.recipe_id = ? AND s.started_at IS NOT NULL AND s.ended_at IS NOT NULL`
+  ).all(t.recipe_id) as { idx: number; started_at: string; ended_at: string }[]
+  const durationsByStep = new Map<number, number[]>()
+  for (const item of historicalDurations) {
+    const duration = new Date(item.ended_at).getTime() - new Date(item.started_at).getTime()
+    const values = durationsByStep.get(item.idx) ?? []
+    values.push(duration)
+    durationsByStep.set(item.idx, values)
+  }
   const mc = run
     ? (db
         .prepare(
@@ -103,7 +116,8 @@ export function buildTaskView(taskId: string): TaskView {
       kind: s.kind,
       status: s.status,
       attempt: s.attempt,
-      outputSummary: s.output_summary
+      outputSummary: s.output_summary,
+      estimatedDurationMs: medianDurationMs(durationsByStep.get(s.idx) ?? [])
     })),
     approvals: approvals.map((a) => ({
       id: a.id,

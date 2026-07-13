@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { ProjectView, RecipeView, TaskView } from '../../shared/types'
 import { StatusChip } from './TaskWorkspace'
 import { Schedules } from './Schedules'
+import { actionPhrase } from '../../shared/progress'
 
 const DEFAULT_RECIPE_ID = 'file-edit-summarize'
 const RESEARCH_GOAL = '研究 AI Agent 桌面应用的最新发展，输出带引用的分析报告。'
@@ -9,7 +10,7 @@ const RESEARCH_GOAL = '研究 AI Agent 桌面应用的最新发展，输出带�
 function TaskRow({ t, onOpen }: { t: TaskView; onOpen: (id: string) => void }): React.JSX.Element {
   const runningStep = t.steps.find((s) => s.status === 'running')
   const lastDone = [...t.steps].reverse().find((s) => s.status === 'done')
-  const progress = runningStep?.title ?? lastDone?.outputSummary ?? lastDone?.title ?? ''
+  const progress = runningStep ? actionPhrase(runningStep.title) : lastDone?.outputSummary ?? lastDone?.title ?? ''
   return (
     <button className="task-row" onClick={() => onOpen(t.id)}>
       <span className="task-goal">{t.goal}</span>

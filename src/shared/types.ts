@@ -131,6 +131,7 @@ export interface StepView {
   status: StepStatus
   attempt: number
   outputSummary: string | null
+  estimatedDurationMs: number | null
 }
 
 export interface ApprovalView {

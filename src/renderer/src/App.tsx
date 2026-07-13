@@ -35,6 +35,7 @@ export function App(): React.JSX.Element {
   const [initialPreset, setInitialPreset] = useState<InitialPreset | undefined>(undefined)
   const [initialTasksFilter, setInitialTasksFilter] = useState<TaskFilter | undefined>(undefined)
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const [inspectorStepId, setInspectorStepId] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
     const list = (await window.api.rpc({ method: 'listTasks' })) as TaskView[]
@@ -62,6 +63,7 @@ export function App(): React.JSX.Element {
     setSelectedTaskId(null)
     setInitialPreset(undefined)
     setInitialTasksFilter(undefined)
+    setInspectorStepId(null)
     setView(id)
   }
 
@@ -84,8 +86,9 @@ export function App(): React.JSX.Element {
     setView('home')
   }
 
-  const openInspector = (taskId: string): void => {
+  const openInspector = (taskId: string, stepId?: string): void => {
     setSelectedTaskId(taskId)
+    setInspectorStepId(stepId ?? null)
     setView('inspector')
   }
 
@@ -150,8 +153,9 @@ export function App(): React.JSX.Element {
       <RunInspector
         taskId={selectedTaskId}
         tasks={list}
-        onSelectTask={(id) => setSelectedTaskId(id)}
+        onSelectTask={(id) => { setSelectedTaskId(id); setInspectorStepId(null) }}
         onBackToTask={openTask}
+        initialStepId={inspectorStepId}
       />
     )
   } else if (view === 'tasks') {

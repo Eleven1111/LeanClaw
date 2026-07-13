@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { mkdirSync } from 'fs'
 import { closeApp, launchApp, type LaunchedApp } from './helpers'
 
 let launched: LaunchedApp | undefined
@@ -27,6 +28,13 @@ test('主路径：启动任务 → 批准写入 → 交付 → Tasks 归档', as
 
   await expect(window.locator('.chip-green', { hasText: 'Delivered' })).toBeVisible({ timeout: 30000 })
   await expect(window.locator('.markdown-preview h1')).toBeVisible()
+  await expect(window.locator('.step-estimate').first()).toBeVisible()
+  mkdirSync('.omx/state/progress-presentation', { recursive: true })
+  await window.locator('.steps').screenshot({ path: '.omx/state/progress-presentation/steps.png' })
+  await window.locator('.step-focus-link').first().click()
+  await expect(window.getByRole('heading', { name: 'Run Inspector' })).toBeVisible()
+  await expect(window.locator('.run-step-detail')).toBeVisible()
+  await window.getByRole('button', { name: '回到任务' }).click()
 
   await window.getByRole('button', { name: 'Deliverables' }).click()
   await window.locator('.grid-card').first().click()
