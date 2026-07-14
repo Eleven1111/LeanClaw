@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('api', {
   copyDeliverable: (artifactId: string) => ipcRenderer.invoke('copy-deliverable', artifactId),
   saveDeliverable: (artifactId: string, title: string) => ipcRenderer.invoke('save-deliverable', artifactId, title),
   exportDeliverablePdf: (title: string) => ipcRenderer.invoke('export-deliverable-pdf', title),
+  exportDiagnostics: () => ipcRenderer.invoke('export-diagnostics'),
   closeQuickCapture: () => ipcRenderer.invoke('quick-capture-close'),
   openQuickCapture: () => ipcRenderer.invoke('quick-capture-open'),
   getPathForFile: (file: File) => webUtils.getPathForFile(file),

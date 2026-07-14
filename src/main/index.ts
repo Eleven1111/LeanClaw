@@ -16,7 +16,8 @@ import {
 import type { UtilityProcess } from 'electron'
 import { writeFile } from 'fs/promises'
 import { existsSync } from 'fs'
-import { join } from 'path'
+import { homedir } from 'os'
+import { basename, join } from 'path'
 import { suggestedExportName } from '../shared/markdown'
 import type {
   McpServerUpsertInput,
@@ -70,6 +71,12 @@ import {
 } from './settings'
 import { buildTrayIconDataURL } from './trayIcon'
 import { appIconCandidates } from './appIcon'
+import {
+  appendDiagnosticEvent,
+  buildDiagnosticManifest,
+  createDiagnosticArchive,
+  diagnosticArchiveName
+} from './diagnostics'
 
 const GLOBAL_SHORTCUT = 'Alt+Space'
 
@@ -82,6 +89,27 @@ if (process.env.LEANCLAW_DATA_DIR) {
   app.setPath('userData', process.env.LEANCLAW_DATA_DIR)
 }
 
+const logsDir = join(app.getPath('userData'), 'logs')
+const privateRoots = [app.getPath('userData'), homedir()]
+
+function logMain(event: string, options: { level?: 'info' | 'error'; code?: string | number; error?: unknown } = {}): void {
+  try {
+    appendDiagnosticEvent({
+      logDir: logsDir,
+      process: 'main',
+      level: options.level ?? 'info',
+      event,
+      ...(options.code === undefined ? {} : { code: options.code }),
+      ...(options.error === undefined ? {} : { error: options.error }),
+      privateRoots
+    })
+  } catch {
+    // Diagnostics must never destabilize the application.
+  }
+}
+
+process.on('uncaughtExceptionMonitor', (error) => logMain('uncaught-exception', { level: 'error', error }))
+
 let win: BrowserWindow | null = null
 let quickWin: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -91,6 +119,7 @@ const pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Err
 const lastUserStatus = new Map<string, string>()
 
 function startRuntime(): void {
+  logMain('runtime-starting')
   runtime = utilityProcess.fork(join(__dirname, 'runtime.js'), [], {
     serviceName: 'leanclaw-runtime',
     env: {
@@ -109,9 +138,12 @@ function startRuntime(): void {
     } else if (msg.kind === 'push' && msg.event) {
       win?.webContents.send('push', msg.event)
       notifyIfNeeded(msg.event)
+    } else if (msg.kind === 'ready') {
+      logMain('runtime-ready')
     }
   })
   runtime.on('exit', (code) => {
+    logMain('runtime-exit', { level: code === 0 ? 'info' : 'error', code })
     if (code !== 0) console.error('leanclaw-runtime 异常退出，code =', code)
   })
 }
@@ -287,6 +319,9 @@ function createWindow(): void {
   })
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   win.webContents.on('will-navigate', (event) => event.preventDefault())
+  win.webContents.on('render-process-gone', (_event, details) => {
+    logMain('renderer-process-gone', { level: 'error', code: `${details.reason}:${details.exitCode}` })
+  })
   if (process.env.ELECTRON_RENDERER_URL) {
     void win.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {
@@ -298,6 +333,7 @@ function createWindow(): void {
 }
 
 void app.whenReady().then(() => {
+  logMain('app-ready')
   if (process.platform === 'darwin' && app.dock && existsSync(appIconPath())) app.dock.setIcon(appIconPath())
   startRuntime()
   pushInitialConfig()
@@ -345,6 +381,35 @@ void app.whenReady().then(() => {
     const pdf = await event.sender.printToPDF({ printBackground: true, pageSize: 'A4' })
     await writeFile(result.filePath, pdf)
     return { cancelled: false }
+  })
+  ipcMain.handle('export-diagnostics', async (event) => {
+    if (event.sender !== win?.webContents) throw new Error('无效的诊断包导出请求')
+    const testDestination = process.env.LEANCLAW_DATA_DIR
+      ? process.env.LEANCLAW_DIAGNOSTICS_EXPORT_PATH
+      : undefined
+    const result = testDestination ? { canceled: false, filePath: testDestination } : await dialog.showSaveDialog(win, {
+      defaultPath: diagnosticArchiveName(),
+      filters: [{ name: 'ZIP Archive', extensions: ['zip'] }]
+    })
+    if (result.canceled || !result.filePath) return { cancelled: true }
+    logMain('diagnostics-exported')
+    await createDiagnosticArchive({
+      logsDir,
+      destination: result.filePath,
+      manifest: buildDiagnosticManifest({
+        createdAt: new Date().toISOString(),
+        appVersion: app.getVersion(),
+        platform: process.platform,
+        arch: process.arch,
+        packaged: app.isPackaged,
+        versions: {
+          electron: process.versions.electron ?? '',
+          node: process.versions.node,
+          chrome: process.versions.chrome ?? ''
+        }
+      })
+    })
+    return { cancelled: false, fileName: basename(result.filePath) }
   })
   ipcMain.handle('settings-get', () => getSettings())
   ipcMain.handle('settings-set-key', (_event, key: string) => {
@@ -458,6 +523,7 @@ app.on('will-quit', () => {
 })
 
 app.on('before-quit', () => {
+  logMain('app-stopping')
   quickWin?.destroy()
   runtime?.kill()
 })

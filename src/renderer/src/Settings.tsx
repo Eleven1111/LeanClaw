@@ -37,6 +37,8 @@ export function Settings({ onBack }: { onBack: () => void }): React.JSX.Element 
   const [shellAllowBusy, setShellAllowBusy] = useState(false)
   const [shellAllowError, setShellAllowError] = useState('')
   const [shellAllowSaved, setShellAllowSaved] = useState(false)
+  const [diagnosticsBusy, setDiagnosticsBusy] = useState(false)
+  const [diagnosticsStatus, setDiagnosticsStatus] = useState('')
 
   const applySettings = (s: SettingsView): void => {
     setSettings(s)
@@ -169,6 +171,19 @@ export function Settings({ onBack }: { onBack: () => void }): React.JSX.Element 
       setShellAllowError((e as Error).message)
     } finally {
       setShellAllowBusy(false)
+    }
+  }
+
+  const exportDiagnostics = async (): Promise<void> => {
+    setDiagnosticsBusy(true)
+    setDiagnosticsStatus('')
+    try {
+      const result = await window.api.exportDiagnostics()
+      setDiagnosticsStatus(result.cancelled ? '' : `已导出 ${result.fileName ?? '诊断包'}`)
+    } catch (error) {
+      setDiagnosticsStatus(`导出失败：${(error as Error).message}`)
+    } finally {
+      setDiagnosticsBusy(false)
     }
   }
 
@@ -399,6 +414,19 @@ export function Settings({ onBack }: { onBack: () => void }): React.JSX.Element 
               活跃事件 {governanceStats.liveEventRows} 行 · 已归档事件 {governanceStats.archivedEventRows} 行 · 已归档任务 {governanceStats.archivedTaskCount} 个
             </p>
           )}
+        </div>
+      </section>
+
+      <section>
+        <h2>诊断与日志</h2>
+        <div className="input-card">
+          <p className="sub">导出版本、系统信息和轮转日志；不包含任务内容、数据库、API Key 或 MCP 密钥。</p>
+          <div className="input-row">
+            <button disabled={diagnosticsBusy} onClick={() => void exportDiagnostics()}>
+              {diagnosticsBusy ? '导出中…' : '导出诊断包'}
+            </button>
+            {diagnosticsStatus && <span role="status" className="meta">{diagnosticsStatus}</span>}
+          </div>
         </div>
       </section>
 

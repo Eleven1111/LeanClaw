@@ -24,6 +24,7 @@ declare global {
       copyDeliverable(artifactId: string): Promise<void>
       saveDeliverable(artifactId: string, title: string): Promise<{ cancelled: boolean }>
       exportDeliverablePdf(title: string): Promise<{ cancelled: boolean }>
+      exportDiagnostics(): Promise<{ cancelled: boolean; fileName?: string }>
       closeQuickCapture(): Promise<void>
       openQuickCapture(): Promise<void>
       getPathForFile(file: File): string

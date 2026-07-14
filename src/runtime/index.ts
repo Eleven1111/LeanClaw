@@ -16,6 +16,7 @@ import { syncMcpFromConfig } from './mcp'
 import type { RpcRequest } from '../shared/types'
 import type { TaskView } from '../shared/types'
 import { startScheduleLoop } from './schedules'
+import { appendDiagnosticEvent } from '../main/diagnostics'
 
 type ParentMessage =
   | { id: number; req: RpcRequest; kind?: undefined }
@@ -41,6 +42,25 @@ interface ParentPort {
 }
 
 const dataDir = process.env.LEANCLAW_DATA_DIR || join(homedir(), '.leanclaw')
+const runtimePrivateRoots = [dataDir, homedir()]
+const logRuntime = (event: string, options: { level?: 'info' | 'error'; code?: string | number; error?: unknown } = {}): void => {
+  try {
+    appendDiagnosticEvent({
+      logDir: join(dataDir, 'logs'),
+      process: 'runtime',
+      level: options.level ?? 'info',
+      event,
+      ...(options.code === undefined ? {} : { code: options.code }),
+      ...(options.error === undefined ? {} : { error: options.error }),
+      privateRoots: runtimePrivateRoots
+    })
+  } catch {
+    // Diagnostics must never interfere with task execution.
+  }
+}
+process.on('uncaughtExceptionMonitor', (error) => logRuntime('uncaught-exception', { level: 'error', error }))
+process.on('exit', (code) => logRuntime('runtime-stopping', { level: code === 0 ? 'info' : 'error', code }))
+logRuntime('runtime-starting')
 initDb(dataDir)
 syncCustomRecipes()
 recoverAfterRestart()
@@ -83,7 +103,8 @@ if (parentPort) {
       .then((result) => parentPort.postMessage({ kind: 'rpc-result', id, result }))
       .catch((err: Error) => parentPort.postMessage({ kind: 'rpc-result', id, error: err.message }))
   })
-  parentPort.postMessage({ kind: 'ready', dataDir })
+  logRuntime('runtime-ready')
+  parentPort.postMessage({ kind: 'ready' })
 } else if (process.env.LEANCLAW_SMOKE === '1') {
   void runSmoke()
 } else {
