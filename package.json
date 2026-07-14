@@ -2,24 +2,26 @@
   "name": "leanclaw",
   "version": "0.1.0",
   "private": true,
+  "author": "LeanClaw",
   "description": "LeanClaw — Mac desktop AI work buddy with a TPS-style lean execution control layer",
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
+    "package:mac": "npm run build && electron-builder --mac --dir --arm64 --publish never",
+    "dist:mac": "npm run build && electron-builder --mac dmg zip --arm64 --publish never",
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run",
     "e2e": "playwright test",
     "smoke": "LEANCLAW_SMOKE=1 ELECTRON_RUN_AS_NODE=1 electron out/main/runtime.js",
-    "postinstall": "electron-rebuild -f -w better-sqlite3"
+    "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "better-sqlite3": "^12.11.1"
   },
   "devDependencies": {
-    "@electron/rebuild": "^4.2.0",
     "@playwright/test": "^1.61.1",
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^24.13.3",
@@ -27,11 +29,48 @@
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.5.0",
     "electron": "^43.1.0",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^3.1.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "typescript": "^5.7.2",
     "vite": "^6.3.5",
     "vitest": "^3.1.4"
+  },
+  "build": {
+    "appId": "com.leanclaw.desktop",
+    "productName": "LeanClaw",
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/better-sqlite3/**"
+    ],
+    "artifactName": "${productName}-${version}-${arch}.${ext}",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources",
+        "to": "resources",
+        "filter": [
+          "icon.png",
+          "icon.icns"
+        ]
+      }
+    ],
+    "mac": {
+      "icon": "resources/icon.icns",
+      "identity": "-",
+      "hardenedRuntime": false,
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    }
   }
 }

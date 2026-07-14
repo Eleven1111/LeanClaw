@@ -81,7 +81,7 @@ import {
 const GLOBAL_SHORTCUT = 'Alt+Space'
 
 function appIconPath(): string {
-  const candidates = appIconCandidates(app.getAppPath(), __dirname)
+  const candidates = appIconCandidates(app.getAppPath(), __dirname, process.resourcesPath)
   return candidates.find((candidate) => existsSync(candidate)) ?? candidates[0]
 }
 
