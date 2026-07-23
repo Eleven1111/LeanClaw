@@ -12,7 +12,7 @@ export function getStatus(taskId: string): InternalStatus {
   return row.status
 }
 
-export function transition(taskId: string, to: InternalStatus): boolean {
+export function transition(taskId: string, to: InternalStatus, shouldPublish = true): boolean {
   const from = getStatus(taskId)
   if (from === to) return false
   if (!canTransition(from, to)) {
@@ -20,7 +20,7 @@ export function transition(taskId: string, to: InternalStatus): boolean {
   }
   getDb().prepare('UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?').run(to, now(), taskId)
   appendEvent(taskId, 'status-changed', { from, to })
-  publishTask(taskId)
+  if (shouldPublish) publishTask(taskId)
   return true
 }
 

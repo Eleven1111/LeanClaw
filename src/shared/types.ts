@@ -296,6 +296,33 @@ export interface ScheduleView {
   nextRunAt: string
   lastTriggeredAt: string | null
   enabled: boolean
+  lastTaskId: string | null
+  lastTaskUserStatus: UserStatus | null
+  lastTaskCreatedAt: string | null
+  lastTriggerSource: ScheduleTriggerSource | null
+  lastTaskNeedsAttention: boolean
+}
+
+export type ScheduleTriggerSource = 'scheduled' | 'manual'
+
+export interface ScheduleHistoryDeliverableView {
+  id: string
+  title: string
+  version: number
+}
+
+export interface ScheduleHistoryItemView {
+  taskId: string
+  taskGoal: string
+  userStatus: UserStatus
+  triggerSource: ScheduleTriggerSource
+  createdAt: string
+  startedAt: string | null
+  endedAt: string | null
+  durationMs: number | null
+  costUsd: number
+  deliverables: ScheduleHistoryDeliverableView[]
+  needsAttention: boolean
 }
 
 export interface RecipeView {
@@ -588,6 +615,8 @@ export type RpcRequest =
   | { method: 'saveSchedule'; scheduleId?: string; name: string; goal: string; inputPath: string; recipeId: string; projectId?: string; agentId?: string; budgetUsd?: number; cadence: 'daily' | 'weekdays' | 'weekly'; timeOfDay: string; dayOfWeek?: number }
   | { method: 'setScheduleEnabled'; scheduleId: string; enabled: boolean }
   | { method: 'deleteSchedule'; scheduleId: string }
+  | { method: 'triggerScheduleNow'; scheduleId: string }
+  | { method: 'getScheduleHistory'; scheduleId: string; limit?: number }
 
 export interface PushEvent {
   type: 'task'

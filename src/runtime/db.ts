@@ -412,6 +412,14 @@ export const MIGRATIONS: Migration[] = [
         }
       }
     }
+  },
+  {
+    version: 12,
+    up(database) {
+      if (!hasColumn(database, 'tasks', 'schedule_trigger_source')) {
+        database.exec('ALTER TABLE tasks ADD COLUMN schedule_trigger_source TEXT')
+      }
+    }
   }
 ]
 

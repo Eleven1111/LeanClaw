@@ -44,6 +44,7 @@ export function Home({
   onRefreshNeedYou,
   onOpen,
   initialPreset,
+  onViewAutomations,
   onViewAllNeedYou,
   onViewAllDelivered
 }: {
@@ -54,6 +55,7 @@ export function Home({
   onRefreshNeedYou: () => Promise<void>
   onOpen: (id: string) => void
   initialPreset?: InitialPreset
+  onViewAutomations: () => void
   onViewAllNeedYou: () => void
   onViewAllDelivered: () => void
 }): React.JSX.Element {
@@ -246,6 +248,7 @@ export function Home({
 
       <Schedules
         disabled={!goal.trim() || (requiresInput && !inputPath.trim())}
+        onViewAutomations={onViewAutomations}
         template={{ goal, inputPath: requiresInput ? inputPath : '', recipeId,
           ...(projectId ? { projectId } : {}),
           ...(agentId ? { agentId } : {}),

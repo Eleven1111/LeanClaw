@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { nextOccurrence, validateScheduleInput } from '../src/shared/schedule'
+import { normalizeScheduleHistoryLimit } from '../src/runtime/automations'
 
 describe('nextOccurrence', () => {
   it('每日时间已过则排到次日，未过则仍是当天', () => {
@@ -34,5 +35,19 @@ describe('validateScheduleInput', () => {
     expect(validateScheduleInput({ cadence: 'weekdays', timeOfDay: '08:30' })).toEqual({
       ok: true, value: { cadence: 'weekdays', timeOfDay: '08:30', dayOfWeek: null }
     })
+  })
+})
+
+describe('normalizeScheduleHistoryLimit', () => {
+  it('默认取最近五次，并接受 1–20 的整数', () => {
+    expect(normalizeScheduleHistoryLimit(undefined)).toBe(5)
+    expect(normalizeScheduleHistoryLimit(1)).toBe(1)
+    expect(normalizeScheduleHistoryLimit(20)).toBe(20)
+  })
+
+  it('拒绝小数、零和超上限', () => {
+    expect(() => normalizeScheduleHistoryLimit(1.5)).toThrow(/1–20/)
+    expect(() => normalizeScheduleHistoryLimit(0)).toThrow(/1–20/)
+    expect(() => normalizeScheduleHistoryLimit(21)).toThrow(/1–20/)
   })
 })

@@ -44,9 +44,9 @@ describe('pendingMigrations（迁移框架）', () => {
     expect(migrations).toEqual(original)
   })
 
-  it('产品 Phase 2 的迁移保持 v1–v11 连续递增', () => {
+  it('产品 Phase 2 的迁移保持 v1–v12 连续递增', () => {
     expect(MIGRATIONS.map((migration) => migration.version)).toEqual([
-      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12
     ])
   })
 
@@ -78,6 +78,35 @@ describe('pendingMigrations（迁移框架）', () => {
       )
     }
     expect(statements).toHaveLength(6)
+    expect(statements.every((statement) => !/DEFAULT|UPDATE/i.test(statement))).toBe(true)
+  })
+
+  it('v12 只增加 Automation 触发来源且不回填旧 Task', () => {
+    const columns = ['id', 'schedule_id']
+    const statements: string[] = []
+    const database = {
+      prepare(sql: string) {
+        return {
+          all: () => (
+            sql.includes('PRAGMA table_info(tasks)')
+              ? columns.map((name) => ({ name }))
+              : []
+          )
+        }
+      },
+      exec(sql: string) {
+        statements.push(sql)
+        const column = sql.match(/ALTER TABLE tasks ADD COLUMN (\S+)/)?.[1]
+        if (column) columns.push(column)
+      }
+    }
+
+    MIGRATIONS.find((migration) => migration.version === 12)?.up(database as never)
+
+    expect(columns).toContain('schedule_trigger_source')
+    expect(statements).toEqual([
+      'ALTER TABLE tasks ADD COLUMN schedule_trigger_source TEXT'
+    ])
     expect(statements.every((statement) => !/DEFAULT|UPDATE/i.test(statement))).toBe(true)
   })
 })

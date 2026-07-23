@@ -17,6 +17,7 @@ import { Projects } from './Projects'
 import { Agents } from './Agents'
 import { RuntimeCenter, runtimeOverallLabel } from './RuntimeCenter'
 import { NeedYou } from './NeedYou'
+import { Automations } from './Automations'
 import type { TaskFilter } from './Tasks'
 import { CommandPalette, type PaletteCommand } from './CommandPalette'
 import appIconUrl from '../../../resources/icon.png'
@@ -28,6 +29,7 @@ type ViewId =
   | 'needYou'
   | 'projects'
   | 'agents'
+  | 'automations'
   | 'deliverables'
   | 'library'
   | 'runtime'
@@ -50,6 +52,7 @@ const NAV_ITEMS: { id: ViewId; label: string; title: string; group: NavGroup }[]
   { id: 'needYou', label: 'Need You', title: '需要你处理', group: 'workspace' },
   { id: 'projects', label: 'Projects', title: '项目', group: 'workspace' },
   { id: 'agents', label: 'Agent', title: 'Agent', group: 'workspace' },
+  { id: 'automations', label: 'Automations', title: '自动化', group: 'workspace' },
   { id: 'deliverables', label: 'Deliverables', title: '交付物', group: 'assets' },
   { id: 'library', label: 'Library', title: '能力库', group: 'assets' },
   { id: 'runtime', label: 'Runtime', title: '运行时', group: 'system' },
@@ -69,6 +72,7 @@ const PAGE_TITLES: Record<ViewId, string> = {
   needYou: '需要你处理',
   projects: '项目',
   agents: 'Agent',
+  automations: '自动化',
   deliverables: '交付物',
   library: '能力库',
   runtime: '运行时',
@@ -308,6 +312,8 @@ export function App(): React.JSX.Element {
     content = <Projects tasks={list} onOpenTask={openTask} />
   } else if (view === 'agents') {
     content = <Agents onUseAgent={useAgentAsTask} />
+  } else if (view === 'automations') {
+    content = <Automations onOpenTask={openTask} />
   } else if (view === 'deliverables') {
     content = <Deliverables onOpenTask={openTask} />
   } else if (view === 'library') {
@@ -349,6 +355,7 @@ export function App(): React.JSX.Element {
         onRefreshNeedYou={refreshNeedYou}
         onOpen={openTask}
         initialPreset={initialPreset}
+        onViewAutomations={() => navigate('automations')}
         onViewAllNeedYou={() => navigate('needYou')}
         onViewAllDelivered={() => openTasksFiltered('Delivered')}
       />

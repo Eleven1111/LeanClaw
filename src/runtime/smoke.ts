@@ -1,7 +1,7 @@
 import { join } from 'path'
 import { existsSync } from 'fs'
 import { getDb, getSamplePath, getWorkspaceDir } from './db'
-import { createScheduledTask, handleRpc } from './api'
+import { createAndStartScheduledTask, createScheduledTask, handleRpc } from './api'
 import { subscribe } from './bus'
 import { getRuntimeConfig, resolveConfig, setRuntimeConfig } from './config'
 import { getMcpStatus, shutdownAllMcp, syncMcpFromConfig } from './mcp'
@@ -26,6 +26,10 @@ export async function runSmoke(): Promise<void> {
   }
   if (process.env.LEANCLAW_SMOKE_AGENT_BINDING) {
     await runAgentBindingSmoke()
+    return
+  }
+  if (process.env.LEANCLAW_SMOKE_AUTOMATION) {
+    await runAutomationSmoke()
     return
   }
   if (process.env.LEANCLAW_SMOKE_SCHEDULE) {
@@ -83,11 +87,17 @@ function runAgentMigrationSmoke(): void {
   const task = db
     .prepare(
       `SELECT agent_id as agentId, agent_name_snapshot as agentName,
-              agent_instructions_snapshot as agentInstructions
+              agent_instructions_snapshot as agentInstructions,
+              schedule_trigger_source as scheduleTriggerSource
        FROM tasks WHERE id = 'legacy-task'`
     )
     .get() as
-    | { agentId: string | null; agentName: string | null; agentInstructions: string | null }
+    | {
+        agentId: string | null
+        agentName: string | null
+        agentInstructions: string | null
+        scheduleTriggerSource: string | null
+      }
     | undefined
   const schedule = db
     .prepare(`SELECT agent_id as agentId FROM schedules WHERE id = 'legacy-schedule'`)
@@ -104,9 +114,14 @@ function runAgentMigrationSmoke(): void {
     | { actorType: string | null; actorId: string | null; actorName: string | null }
     | undefined
   const pass =
-    version === 11 &&
+    version === 12 &&
     agentTable &&
-    ['agent_id', 'agent_name_snapshot', 'agent_instructions_snapshot'].every((column) =>
+    [
+      'agent_id',
+      'agent_name_snapshot',
+      'agent_instructions_snapshot',
+      'schedule_trigger_source'
+    ].every((column) =>
       taskColumns.includes(column)
     ) &&
     scheduleColumns.includes('agent_id') &&
@@ -116,6 +131,7 @@ function runAgentMigrationSmoke(): void {
     task?.agentId === null &&
     task.agentName === null &&
     task.agentInstructions === null &&
+    task.scheduleTriggerSource === null &&
     schedule?.agentId === null &&
     legacyEvent?.actorType === null &&
     legacyEvent.actorId === null &&
@@ -124,7 +140,11 @@ function runAgentMigrationSmoke(): void {
     `[agent-migration] version=${version} agents=${agentTable ? 'yes' : 'no'} ` +
       `legacyTask=${task ? 'kept' : 'missing'} legacySchedule=${schedule ? 'kept' : 'missing'}`
   )
-  out(pass ? '[smoke] PASS（v8 → v11 Agent/Activity 迁移零丢失）' : '[smoke] FAIL（Agent/Activity 迁移）')
+  out(
+    pass
+      ? '[smoke] PASS（v8 → v12 Agent/Activity/Automation 迁移零丢失）'
+      : '[smoke] FAIL（Agent/Activity/Automation 迁移）'
+  )
   process.exit(pass ? 0 : 1)
 }
 
@@ -447,6 +467,120 @@ async function runScheduleSmoke(): Promise<void> {
   out(`[schedule] status=${final?.status} tasks=${count} next=future last=set concurrentClaims=${claims} pausedClaims=${pausedClaims}`)
   out(ok ? '[smoke] PASS（定时任务：到点入队、交付、防重复）' : '[smoke] FAIL（定时任务）')
   process.exit(ok ? 0 : 1)
+}
+
+async function waitForAutomationTask(taskId: string): Promise<TaskView> {
+  for (let index = 0; index < 240; index++) {
+    const task = await handleRpc({ method: 'getTask', taskId }) as TaskView
+    if (task.status === 'awaiting_approval') {
+      const approval = task.approvals.find((item) => item.status === 'pending')
+      if (approval) {
+        await handleRpc({
+          method: 'resolveApproval',
+          approvalId: approval.id,
+          decision: 'approved'
+        })
+      }
+    } else if (task.status === 'andon_open') {
+      const andon = task.andons.find((item) => item.status === 'open')
+      if (andon) {
+        await handleRpc({
+          method: 'resolveAndon',
+          andonId: andon.id,
+          action: andon.recommendedActions.includes('retry') ? 'retry' : 'cancel'
+        })
+      }
+    } else if (
+      ['delivered', 'verification_failed', 'cancelled_by_user', 'failed'].includes(task.status)
+    ) {
+      return task
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  }
+  return handleRpc({ method: 'getTask', taskId }) as Promise<TaskView>
+}
+
+async function runAutomationSmoke(): Promise<void> {
+  const schedule = await handleRpc({
+    method: 'saveSchedule',
+    name: 's18 Automation',
+    goal: '把文件整理成带引用摘要',
+    inputPath: getSamplePath(),
+    recipeId: 'file-edit-summarize',
+    cadence: 'daily',
+    timeOfDay: '23:59'
+  }) as { id: string; nextRunAt: string }
+  const originalNext = schedule.nextRunAt
+  const manual = await handleRpc({
+    method: 'triggerScheduleNow',
+    scheduleId: schedule.id
+  }) as TaskView
+  const manualFinal = await waitForAutomationTask(manual.id)
+  const afterManual = (await handleRpc({ method: 'listSchedules' }) as Array<{
+    id: string
+    nextRunAt: string
+  }>).find((item) => item.id === schedule.id)
+  const manualHistory = await handleRpc({
+    method: 'getScheduleHistory',
+    scheduleId: schedule.id,
+    limit: 5
+  }) as Array<{ taskId: string; triggerSource: string }>
+
+  const at = new Date()
+  getDb().prepare('UPDATE schedules SET next_run_at = ? WHERE id = ?')
+    .run(new Date(at.getTime() - 1000).toISOString(), schedule.id)
+  let scheduledTask: TaskView | null = null
+  const dueTrigger = async (due: DueSchedule): Promise<void> => {
+    scheduledTask = createAndStartScheduledTask(due, 'scheduled')
+  }
+  await runDueSchedules(dueTrigger, at)
+  if (!scheduledTask) throw new Error('s18 未创建定时 Task')
+  const scheduledFinal = await waitForAutomationTask((scheduledTask as TaskView).id)
+  await runDueSchedules(dueTrigger, at)
+
+  const history = await handleRpc({
+    method: 'getScheduleHistory',
+    scheduleId: schedule.id,
+    limit: 5
+  }) as Array<{ taskId: string; triggerSource: string }>
+  const taskRows = getDb().prepare(
+    `SELECT id,schedule_id as scheduleId,schedule_trigger_source as triggerSource
+     FROM tasks WHERE schedule_id = ? ORDER BY created_at`
+  ).all(schedule.id) as Array<{
+    id: string
+    scheduleId: string
+    triggerSource: string
+  }>
+  const finalSchedule = (await handleRpc({ method: 'listSchedules' }) as Array<{
+    id: string
+    nextRunAt: string
+    lastTriggeredAt: string | null
+  }>).find((item) => item.id === schedule.id)
+  const sources = new Set(history.map((item) => item.triggerSource))
+  const pass =
+    manualFinal.status === 'delivered' &&
+    scheduledFinal.status === 'delivered' &&
+    afterManual?.nextRunAt === originalNext &&
+    manualHistory[0]?.taskId === manual.id &&
+    manualHistory[0]?.triggerSource === 'manual' &&
+    taskRows.length === 2 &&
+    taskRows.every((row) => row.scheduleId === schedule.id) &&
+    new Set(taskRows.map((row) => row.triggerSource)).size === 2 &&
+    sources.has('manual') &&
+    sources.has('scheduled') &&
+    Boolean(finalSchedule?.lastTriggeredAt) &&
+    Boolean(finalSchedule && finalSchedule.nextRunAt > at.toISOString())
+  out(
+    `[automation] manual=${manualFinal.status} scheduled=${scheduledFinal.status} ` +
+      `tasks=${taskRows.length} sources=${[...sources].sort().join('/')} ` +
+      `manualNextUnchanged=${afterManual?.nextRunAt === originalNext}`
+  )
+  out(
+    pass
+      ? '[smoke] PASS（s18 Automation 手动/定时同链路、历史与防重复）'
+      : '[smoke] FAIL（s18 Automation）'
+  )
+  process.exit(pass ? 0 : 1)
 }
 
 async function runShellSmoke(): Promise<void> {

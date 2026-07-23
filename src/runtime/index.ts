@@ -1,7 +1,12 @@
 import { homedir } from 'os'
 import { join } from 'path'
 import { initDb } from './db'
-import { createScheduledTask, handleRpc, recoverAfterRestart, syncCustomRecipes } from './api'
+import {
+  createAndStartScheduledTask,
+  handleRpc,
+  recoverAfterRestart,
+  syncCustomRecipes
+} from './api'
 import { subscribe } from './bus'
 import { runSmoke } from './smoke'
 import { setRuntimeConfig } from './config'
@@ -64,8 +69,7 @@ initDb(dataDir)
 syncCustomRecipes()
 recoverAfterRestart()
 startScheduleLoop(async (schedule) => {
-  const task = createScheduledTask(schedule)
-  await handleRpc({ method: 'startTask', taskId: task.id })
+  createAndStartScheduledTask(schedule, 'scheduled')
 })
 
 const parentPort = (process as unknown as { parentPort?: ParentPort }).parentPort

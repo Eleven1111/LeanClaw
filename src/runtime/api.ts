@@ -4,6 +4,7 @@ import { join } from 'path'
 import { appendEvent, archiveTaskEvents } from './ledger'
 import { getTaskActivity } from './activity'
 import { listNeedYouItems } from './need-you'
+import { getScheduleHistory } from './automations'
 import {
   getRuntimeOverview,
   resolveProviderForConnectionTest
@@ -18,7 +19,7 @@ import { getMcpStatus } from './mcp'
 import { fileEditRecipe, getRecipe, listRecipes, registerRecipe, unregisterRecipe } from './recipe'
 import { buildCustomRecipe } from './custom-recipe'
 import { validateCustomRecipeInput } from '../shared/custom-recipe'
-import { canTransition } from '../shared/machine'
+import { canTransition, USER_STATUS_MAP } from '../shared/machine'
 import { nextOccurrence, validateScheduleInput } from '../shared/schedule'
 import type { DueSchedule } from './schedules'
 import {
@@ -41,6 +42,7 @@ import type {
   RuleSetView,
   CustomRecipeView,
   ScheduleView,
+  ScheduleTriggerSource,
   RecipeView,
   RpcRequest,
   RunDetailView,
@@ -173,6 +175,10 @@ export async function handleRpc(req: RpcRequest): Promise<unknown> {
       return setScheduleEnabled(req.scheduleId, req.enabled)
     case 'deleteSchedule':
       return deleteSchedule(req.scheduleId)
+    case 'triggerScheduleNow':
+      return triggerScheduleNow(req.scheduleId)
+    case 'getScheduleHistory':
+      return getScheduleHistory(req.scheduleId, req.limit)
   }
 }
 
@@ -665,16 +671,50 @@ function deleteCustomRecipe(customRecipeId: string): void {
 }
 
 function listSchedules(): ScheduleView[] {
+  const needYouTaskIds = new Set(listNeedYouItems().map((item) => item.taskId))
   const rows = getDb().prepare(
     `SELECT s.id,s.name,s.goal,s.input_path as inputPath,s.recipe_id as recipeId,
             s.project_id as projectId,s.agent_id as agentId,a.name as agentName,
             s.budget_usd as budgetUsd,s.cadence,s.time_of_day as timeOfDay,
             s.day_of_week as dayOfWeek,s.next_run_at as nextRunAt,
-            s.last_triggered_at as lastTriggeredAt,s.enabled
+            s.last_triggered_at as lastTriggeredAt,s.enabled,
+            latest.id as lastTaskId,latest.status as lastTaskStatus,
+            latest.created_at as lastTaskCreatedAt,
+            latest.schedule_trigger_source as lastTriggerSource
      FROM schedules s LEFT JOIN agents a ON a.id = s.agent_id
+     LEFT JOIN tasks latest ON latest.id = (
+       SELECT t.id FROM tasks t
+       WHERE t.schedule_id = s.id
+       ORDER BY t.created_at DESC, t.rowid DESC
+       LIMIT 1
+     )
      ORDER BY s.created_at DESC`
-  ).all() as (Omit<ScheduleView, 'recipeTitle' | 'enabled'> & { enabled: number })[]
-  return rows.map((row) => ({ ...row, enabled: Boolean(row.enabled), recipeTitle: getRecipe(row.recipeId).title }))
+  ).all() as Array<
+    Omit<
+      ScheduleView,
+      | 'recipeTitle'
+      | 'enabled'
+      | 'lastTaskUserStatus'
+      | 'lastTaskNeedsAttention'
+      | 'lastTriggerSource'
+    > & {
+      enabled: number
+      lastTaskStatus: InternalStatus | null
+      lastTriggerSource: string | null
+    }
+  >
+  return rows.map(({ lastTaskStatus, ...row }) => ({
+    ...row,
+    enabled: Boolean(row.enabled),
+    recipeTitle: getRecipe(row.recipeId).title,
+    lastTaskUserStatus: lastTaskStatus ? USER_STATUS_MAP[lastTaskStatus] : null,
+    lastTriggerSource: row.lastTaskId
+      ? (row.lastTriggerSource === 'manual' ? 'manual' : 'scheduled')
+      : null,
+    lastTaskNeedsAttention: row.lastTaskId
+      ? needYouTaskIds.has(row.lastTaskId)
+      : false
+  }))
 }
 
 function saveSchedule(req: Extract<RpcRequest, { method: 'saveSchedule' }>): ScheduleView {
@@ -746,6 +786,20 @@ function deleteSchedule(scheduleId: string): void {
   if (result.changes !== 1) throw new Error('定时计划不存在')
 }
 
+function scheduleForTrigger(scheduleId: string): DueSchedule {
+  const row = getDb().prepare(
+    `SELECT id,goal,input_path as inputPath,recipe_id as recipeId,
+            project_id as projectId,agent_id as agentId,budget_usd as budgetUsd
+     FROM schedules WHERE id = ?`
+  ).get(scheduleId) as DueSchedule | undefined
+  if (!row) throw new Error('自动化不存在')
+  return row
+}
+
+function triggerScheduleNow(scheduleId: string): TaskView {
+  return createAndStartScheduledTask(scheduleForTrigger(scheduleId), 'manual')
+}
+
 function createTask(
   goal: string,
   inputPath: string,
@@ -753,7 +807,11 @@ function createTask(
   budgetUsd?: number,
   projectId?: string,
   agentId?: string,
-  actor: EventActor = USER_ACTOR
+  actor: EventActor = USER_ACTOR,
+  scheduleContext?: {
+    scheduleId: string
+    triggerSource: ScheduleTriggerSource
+  }
 ): TaskView {
   if (!goal.trim()) throw new Error('任务目标不能为空')
   const agent = agentId
@@ -802,8 +860,9 @@ function createTask(
     .prepare(
       `INSERT INTO tasks
        (id, project_id, project_instructions_snapshot, agent_id, agent_name_snapshot,
-        agent_instructions_snapshot, goal, input_path, recipe_id, status, budget_usd, created_at, updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?, 'draft', ?, ?, ?)`
+        agent_instructions_snapshot, goal, input_path, recipe_id, status, budget_usd,
+        schedule_id, schedule_trigger_source, created_at, updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?, 'draft', ?, ?, ?, ?, ?)`
     )
     .run(
       id,
@@ -816,6 +875,8 @@ function createTask(
       inputPath.trim(),
       rid,
       effectiveBudget,
+      scheduleContext?.scheduleId ?? null,
+      scheduleContext?.triggerSource ?? null,
       now(),
       now()
     )
@@ -831,7 +892,9 @@ function createTask(
       hasProjectInstructions: Boolean(project?.saved_instructions),
       agentId: agent?.id ?? null,
       agentName: agent?.name ?? null,
-      hasAgentInstructions: Boolean(agent?.instructions)
+      hasAgentInstructions: Boolean(agent?.instructions),
+      scheduleId: scheduleContext?.scheduleId ?? null,
+      scheduleTriggerSource: scheduleContext?.triggerSource ?? null
     },
     null,
     null,
@@ -840,21 +903,38 @@ function createTask(
   return buildTaskView(id)
 }
 
-export function createScheduledTask(schedule: DueSchedule): TaskView {
-  const task = createTask(
+export function createScheduledTask(
+  schedule: DueSchedule,
+  triggerSource: ScheduleTriggerSource = 'scheduled'
+): TaskView {
+  return createTask(
     schedule.goal,
     schedule.inputPath,
     schedule.recipeId,
     schedule.budgetUsd ?? undefined,
     schedule.projectId ?? undefined,
     schedule.agentId ?? undefined,
-    { type: 'system', name: '自动化' }
+    triggerSource === 'manual'
+      ? USER_ACTOR
+      : { type: 'system', name: '自动化' },
+    { scheduleId: schedule.id, triggerSource }
   )
-  getDb().prepare('UPDATE tasks SET schedule_id = ? WHERE id = ?').run(schedule.id, task.id)
+}
+
+export function createAndStartScheduledTask(
+  schedule: DueSchedule,
+  triggerSource: ScheduleTriggerSource = 'scheduled'
+): TaskView {
+  const task = getDb().transaction(() => {
+    const created = createScheduledTask(schedule, triggerSource)
+    return startTask(created.id, false, false)
+  })()
+  publishTask(task.id)
+  requestRun(task.id)
   return buildTaskView(task.id)
 }
 
-function startTask(taskId: string): TaskView {
+function startTask(taskId: string, enqueue = true, shouldPublish = true): TaskView {
   const task = getDb().prepare('SELECT * FROM tasks WHERE id = ?').get(taskId) as {
     goal: string
     input_path: string
@@ -865,7 +945,7 @@ function startTask(taskId: string): TaskView {
     agent_name_snapshot: string | null
     agent_instructions_snapshot: string | null
   }
-  transition(taskId, 'planning')
+  transition(taskId, 'planning', shouldPublish)
   const recipe = getRecipe(task.recipe_id)
   const projectName = task.project_id
     ? (getDb().prepare('SELECT name FROM projects WHERE id = ?').get(task.project_id) as { name: string } | undefined)?.name
@@ -910,8 +990,8 @@ function startTask(taskId: string): TaskView {
     ? { type: 'agent', id: task.agent_id, name: task.agent_name_snapshot ?? 'Agent' }
     : { type: 'system', name: '系统' }
   appendEvent(taskId, 'run-started', { recipe: recipe.id }, runId, null, executionActor)
-  transition(taskId, 'queued')
-  requestRun(taskId)
+  transition(taskId, 'queued', shouldPublish)
+  if (enqueue) requestRun(taskId)
   return buildTaskView(taskId)
 }
 
