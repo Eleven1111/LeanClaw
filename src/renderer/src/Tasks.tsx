@@ -32,11 +32,11 @@ const FILTERS: { id: TaskFilter; label: string }[] = [
 ]
 
 const BOARD_COLUMNS: { status: UserStatus; label: string }[] = [
-  { status: 'Running', label: 'Running' },
-  { status: 'Waiting for You', label: 'Waiting for You' },
-  { status: 'Verifying', label: 'Verifying' },
-  { status: 'Delivered', label: 'Delivered' },
-  { status: 'Blocked', label: 'Blocked' }
+  { status: 'Running', label: '执行中' },
+  { status: 'Waiting for You', label: '待你处理' },
+  { status: 'Verifying', label: '验证中' },
+  { status: 'Delivered', label: '已交付' },
+  { status: 'Blocked', label: '已阻塞' }
 ]
 
 function matchesFilter(t: TaskView, f: TaskFilter): boolean {
@@ -102,11 +102,21 @@ function TaskListRow({
 }
 
 function KanbanCard({ t, onOpen }: { t: TaskView; onOpen: (id: string) => void }): React.JSX.Element {
+  const taskCode = t.id.replaceAll('-', '').slice(-6).toUpperCase()
+  const modelCalls = t.metrics.modelCalls
+  const toolCalls = t.metrics.toolCalls
   return (
     <button className="grid-card kanban-card" onClick={() => onOpen(t.id)}>
+      <div className="kanban-card-meta">
+        <span className="kanban-card-code">LC-{taskCode}</span>
+        {t.queuePosition !== null && <span className="queue-badge">队列 #{t.queuePosition}</span>}
+      </div>
       <div className="kanban-card-goal preset-goal">{t.goal}</div>
       <div className="kanban-card-step muted">{currentStepPhrase(t)}</div>
-      {t.queuePosition !== null && <span className="queue-badge">第 {t.queuePosition} 位</span>}
+      <div className="kanban-card-footer">
+        <span className="kanban-project">{t.projectName ?? '独立任务'}</span>
+        <span className="kanban-activity">{modelCalls} 模型 · {toolCalls} 工具</span>
+      </div>
     </button>
   )
 }
@@ -202,11 +212,21 @@ export function Tasks({
   const filtered = tasks.filter((t) => matchesFilter(t, filter))
 
   return (
-    <div className="tasks-page">
-      <div className="home-head">
-        <div>
-          <h1>Tasks</h1>
-          <p className="sub">全部任务的筛选列表与看板视图。</p>
+    <div className={`tasks-page ${mode === 'board' ? 'board-mode' : 'list-mode'}`}>
+      <div className="tasks-toolbar">
+        <div className="filter-chips">
+          {FILTERS.slice(0, 4).map((f) => (
+            <button
+              key={f.id}
+              className={`filter-chip ${filter === f.id && mode === 'list' ? 'active' : ''}`}
+              onClick={() => {
+                setFilter(f.id)
+                setMode('list')
+              }}
+            >
+              {f.label} <span>{counts[f.id]}</span>
+            </button>
+          ))}
         </div>
         <div className="view-toggle">
           <button className={mode === 'list' ? 'active' : ''} onClick={() => setMode('list')}>
@@ -223,7 +243,7 @@ export function Tasks({
       {mode === 'list' ? (
         <>
           <div className="filter-chips">
-            {FILTERS.map((f) => (
+            {FILTERS.slice(4).map((f) => (
               <button
                 key={f.id}
                 className={`filter-chip ${filter === f.id ? 'active' : ''}`}
@@ -253,17 +273,22 @@ export function Tasks({
           {BOARD_COLUMNS.map((col) => {
             const items = tasks.filter((t) => t.userStatus === col.status)
             return (
-              <div className="kanban-column" key={col.status}>
+              <section className="kanban-column" data-status={col.status} key={col.status}>
                 <div className="kanban-column-head">
-                  <h3>{col.label}</h3>
-                  <span className="kanban-column-count">{items.length}</span>
+                  <div>
+                    <span className="kanban-status-dot" />
+                    <h3>{col.label}</h3>
+                    <span className="kanban-column-count">{items.length}</span>
+                  </div>
+                  <span className="kanban-column-menu">更多</span>
                 </div>
                 <div className="card-grid kanban-column-body">
                   {items.map((t) => (
                     <KanbanCard key={t.id} t={t} onOpen={onOpenTask} />
                   ))}
+                  {items.length === 0 && <div className="kanban-empty">暂无任务</div>}
                 </div>
-              </div>
+              </section>
             )
           })}
         </div>

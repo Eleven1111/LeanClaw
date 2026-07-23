@@ -10,6 +10,7 @@ import { Tasks } from './Tasks'
 import { Projects } from './Projects'
 import type { TaskFilter } from './Tasks'
 import { CommandPalette, type PaletteCommand } from './CommandPalette'
+import appIconUrl from '../../../resources/icon.png'
 
 type ViewId = 'home' | 'task' | 'tasks' | 'projects' | 'deliverables' | 'library' | 'settings' | 'inspector'
 
@@ -19,14 +20,33 @@ interface InitialPreset {
   inputPath?: string
 }
 
-const NAV_ITEMS: { id: ViewId; label: string }[] = [
-  { id: 'home', label: 'Home' },
-  { id: 'tasks', label: 'Tasks' },
-  { id: 'projects', label: 'Projects' },
-  { id: 'deliverables', label: 'Deliverables' },
-  { id: 'library', label: 'Library' },
-  { id: 'settings', label: 'Settings' }
+type NavGroup = 'workspace' | 'assets' | 'system'
+
+const NAV_ITEMS: { id: ViewId; label: string; title: string; group: NavGroup }[] = [
+  { id: 'home', label: 'Home', title: '发起任务', group: 'workspace' },
+  { id: 'tasks', label: 'Tasks', title: '任务', group: 'workspace' },
+  { id: 'projects', label: 'Projects', title: '项目', group: 'workspace' },
+  { id: 'deliverables', label: 'Deliverables', title: '交付物', group: 'assets' },
+  { id: 'library', label: 'Library', title: '能力库', group: 'assets' },
+  { id: 'settings', label: 'Settings', title: '设置', group: 'system' }
 ]
+
+const NAV_GROUPS: { id: NavGroup; label: string }[] = [
+  { id: 'workspace', label: '工作区' },
+  { id: 'assets', label: '资料与交付' },
+  { id: 'system', label: '系统' }
+]
+
+const PAGE_TITLES: Record<ViewId, string> = {
+  home: '新任务',
+  task: '任务详情',
+  tasks: '任务',
+  projects: '项目',
+  deliverables: '交付物',
+  library: '能力库',
+  settings: '设置',
+  inspector: '运行检查'
+}
 
 export function App(): React.JSX.Element {
   const [tasks, setTasks] = useState<Record<string, TaskView>>({})
@@ -180,37 +200,91 @@ export function App(): React.JSX.Element {
   }
 
   const activeNav = view === 'task' ? 'home' : view === 'inspector' ? '' : view
+  const runningCount = list.filter((task) => ['Planning', 'Running', 'Verifying'].includes(task.userStatus)).length
+  const deliveredCount = list.filter((task) => task.userStatus === 'Delivered').length
+
+  const navCount = (id: ViewId): number | null => {
+    if (id === 'tasks') return list.length
+    if (id === 'deliverables') return deliveredCount
+    return null
+  }
 
   return (
     <div className="app-shell">
       <nav className="sidebar">
         <div className="sidebar-drag" />
+        <div className="sidebar-brand">
+          <img src={appIconUrl} alt="" />
+          <div>
+            <strong>LeanClaw</strong>
+            <span>本地执行工作台</span>
+          </div>
+        </div>
+        <div className="sidebar-quick">
+          <button className="sidebar-search command-trigger" onClick={() => setPaletteOpen(true)}>
+            <span>搜索或跳转</span><kbd>⌘K</kbd>
+          </button>
+          <button
+            aria-label="Home"
+            className={`sidebar-create ${activeNav === 'home' ? 'active' : ''}`}
+            onClick={() => navigate('home')}
+          >
+            <span>发起任务</span><kbd>N</kbd>
+          </button>
+        </div>
         <div className="sidebar-nav">
-          {NAV_ITEMS.map((item) => (
-            <button
-              key={item.id}
-              className={`sidebar-item ${activeNav === item.id ? 'active' : ''}`}
-              onClick={() => navigate(item.id)}
-            >
-              {item.label}
-            </button>
+          {NAV_GROUPS.map((group) => (
+            <div className="sidebar-group" key={group.id}>
+              <div className="sidebar-group-label">{group.label}</div>
+              {NAV_ITEMS.filter((item) => item.group === group.id && item.id !== 'home').map((item) => {
+                const count = navCount(item.id)
+                return (
+                  <button
+                    key={item.id}
+                    className={`sidebar-item ${activeNav === item.id ? 'active' : ''}`}
+                    onClick={() => navigate(item.id)}
+                  >
+                    <span>{item.title}</span>
+                    <span className="visually-hidden">{item.label}</span>
+                    {count !== null && <span className="sidebar-count">{count}</span>}
+                  </button>
+                )
+              })}
+              {group.id === 'system' && (
+                <button
+                  className={`sidebar-item ${view === 'inspector' ? 'active' : ''}`}
+                  onClick={() => navigate('inspector')}
+                >
+                  <span>运行检查</span>
+                </button>
+              )}
+            </div>
           ))}
         </div>
-        <div className="sidebar-nav sidebar-nav-secondary">
-          <button className="sidebar-item command-trigger" onClick={() => setPaletteOpen(true)}>
-            <span>命令面板</span><kbd>⌘K</kbd>
-          </button>
-          <div className="sidebar-group-label">Advanced</div>
-          <button
-            className={`sidebar-item ${view === 'inspector' ? 'active' : ''}`}
-            onClick={() => navigate('inspector')}
-          >
-            Run Inspector
-          </button>
+        <div className="sidebar-footer">
+          <span className={`runtime-dot ${runningCount > 0 ? 'active' : ''}`} />
+          <div>
+            <strong>{runningCount > 0 ? `${runningCount} 个任务执行中` : '运行时已就绪'}</strong>
+            <span>本机数据 · 隐私优先</span>
+          </div>
         </div>
       </nav>
       <div className="content-area">
-        <div className="titlebar" />
+        <header className="topbar">
+          <h1 className="page-title" aria-label={view === 'tasks' ? 'Tasks' : undefined}>
+            {PAGE_TITLES[view]}
+          </h1>
+          <div className="topbar-spacer" />
+          {runningCount > 0 && (
+            <div className="topbar-status">
+              <span className="runtime-dot active" />
+              {runningCount} 个任务执行中
+            </div>
+          )}
+          <button className="topbar-command" onClick={() => setPaletteOpen(true)}>
+            搜索 <kbd>⌘K</kbd>
+          </button>
+        </header>
         {content}
       </div>
       {paletteOpen && <CommandPalette commands={commands} onClose={() => setPaletteOpen(false)} />}
