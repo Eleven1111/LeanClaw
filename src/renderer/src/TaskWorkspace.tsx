@@ -5,6 +5,10 @@ import { RichDeliverablePreview } from './RichDeliverablePreview'
 import { VersionCompare } from './VersionCompare'
 import { actionPhrase, formatDurationReference } from '../../shared/progress'
 import { Presence } from './Presence'
+import {
+  TaskActivityFeed,
+  type ActivityFocusTarget
+} from './TaskActivityFeed'
 
 const BRIEF_EDITABLE_STATUSES: InternalStatus[] = [
   'draft',
@@ -130,6 +134,30 @@ export function TaskWorkspace({
   const budgetNearLimit =
     task.budgetUsd !== null && task.budgetUsd > 0 && task.metrics.costUsd / task.budgetUsd >= 0.8
   const isBudgetAndon = Boolean(openAndon && openAndon.reason.includes('预算'))
+
+  const focusActivityTarget = (target: ActivityFocusTarget): boolean => {
+    const available =
+      target === 'approval'
+        ? Boolean(pendingApproval)
+        : target === 'andon'
+          ? Boolean(openAndon)
+          : Boolean(deliverable)
+    if (!available) return false
+    const targetId: Record<ActivityFocusTarget, string> = {
+      approval: 'approval-card',
+      andon: 'andon-card',
+      deliverable: 'final-deliverable'
+    }
+    const element = document.getElementById(targetId[target])
+    if (!element) return false
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    element.scrollIntoView({
+      behavior: reduceMotion ? 'auto' : 'smooth',
+      block: 'center'
+    })
+    element.focus({ preventScroll: true })
+    return true
+  }
 
   useEffect(() => {
     if (!deliverable) {
@@ -306,7 +334,7 @@ export function TaskWorkspace({
       )}
 
       <Presence show={Boolean(openAndon)}>{openAndon && (
-        <section className="card andon">
+        <section id="andon-card" className="card andon" tabIndex={-1}>
           <h3>需要你处理</h3>
           <p>{openAndon.reason}</p>
           <p className="muted">{openAndon.impact}</p>
@@ -346,7 +374,7 @@ export function TaskWorkspace({
       )}</Presence>
 
       <Presence show={Boolean(pendingApproval)}>{pendingApproval && (
-        <section className="card approval">
+        <section id="approval-card" className="card approval" tabIndex={-1}>
           <h3>待批准：{pendingApproval.actionDesc}</h3>
           <pre className="diff">{pendingApproval.diff}</pre>
           <div className="actions">
@@ -406,7 +434,7 @@ export function TaskWorkspace({
           </ol>
 
           {deliverable && (
-            <section className="deliverable">
+            <section id="final-deliverable" className="deliverable" tabIndex={-1}>
               <h3>最终交付</h3>
               <div className="deliv-head">
                 <strong>{deliverable.title}</strong>
@@ -441,6 +469,13 @@ export function TaskWorkspace({
           <Presence show={Boolean(deliverable && compareOpen)}>{deliverable && (
             <VersionCompare artifactId={deliverable.id} onClose={() => setCompareOpen(false)} />
           )}</Presence>
+
+          <TaskActivityFeed
+            taskId={task.id}
+            refreshToken={`${task.updatedAt}:${task.metrics.eventCount}:${task.status}`}
+            onOpenInspector={onOpenInspector}
+            onFocusTarget={focusActivityTarget}
+          />
 
           {isReviewState && (
             <section className="card review">

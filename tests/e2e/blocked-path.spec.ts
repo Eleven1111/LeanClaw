@@ -20,6 +20,8 @@ test('验证拦截路径：伪造引用触发验证门 → 取消任务', async 
 
   await expect(window.getByText('任务被验证门拦下')).toBeVisible({ timeout: 30000 })
   await expect(window.locator('.chip-red', { hasText: 'Blocked' })).toBeVisible()
+  await expect(window.getByRole('heading', { name: 'Activity' })).toBeVisible()
+  await expect(window.locator('.task-activity-feed')).toContainText('验证门拦截了交付')
 
   await window.getByRole('button', { name: '取消任务' }).click()
   await expect(window.locator('.chip-gray', { hasText: 'Cancelled' })).toBeVisible({ timeout: 10000 })

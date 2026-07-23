@@ -38,7 +38,7 @@ test('Agent 身份贯穿 Task 快照、列表、看板与定时计划', async ()
     return agent.id
   })
 
-  await window.getByRole('button', { name: 'Agent' }).click()
+  await window.getByRole('button', { name: /^Agent(?: Agent)?$/ }).click()
   await window.getByRole('button', { name: 'Home' }).click()
   await window.getByLabel('Agent').selectOption(agentId)
   await expect(window.getByLabel('Recipe')).toHaveValue('content-pack')

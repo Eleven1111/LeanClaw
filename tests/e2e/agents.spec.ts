@@ -26,7 +26,7 @@ test('Agent Center：创建、编辑、停启、引用保护、预选与重启�
   watchErrors()
 
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(900, 600))
-  await window.getByRole('button', { name: 'Agent' }).click()
+  await window.getByRole('button', { name: /^Agent(?: Agent)?$/ }).click()
   await expect(window.locator('.page-title')).toHaveText('Agent')
   await expect(window.locator('.agent-empty')).toContainText('还没有 Agent')
 
@@ -76,7 +76,7 @@ test('Agent Center：创建、编辑、停启、引用保护、预选与重启�
   await expect(window.getByLabel('Recipe')).toHaveValue('deep-research')
   await expect(window.getByLabel('预算 USD（可选）')).toHaveValue('2.5')
 
-  await window.getByRole('button', { name: 'Agent' }).click()
+  await window.getByRole('button', { name: /^Agent(?: Agent)?$/ }).click()
   await window.getByRole('button', { name: '创建 Agent' }).click()
   await window.getByLabel('Agent 名称').fill('Disposable')
   await window.getByLabel('用途说明').fill('')
@@ -93,7 +93,7 @@ test('Agent Center：创建、编辑、停启、引用保护、预选与重启�
   launched = await launchApp({}, dataDir)
   ;({ app, window, dataDir } = launched)
   watchErrors()
-  await window.getByRole('button', { name: 'Agent' }).click()
+  await window.getByRole('button', { name: /^Agent(?: Agent)?$/ }).click()
   const persisted = window.locator('.agent-card', { hasText: 'Research Lead' })
   await expect(persisted).toBeVisible()
 
@@ -117,7 +117,7 @@ test('Agent Center：创建、编辑、停启、引用保护、预选与重启�
     `UPDATE schedules SET agent_id='${agentId}' WHERE id='${scheduleId}'`
   ])
   await window.getByRole('button', { name: 'Home' }).click()
-  await window.getByRole('button', { name: 'Agent' }).click()
+  await window.getByRole('button', { name: /^Agent(?: Agent)?$/ }).click()
 
   const referenced = window.locator('.agent-card', { hasText: 'Research Lead' })
   await expect(referenced).toContainText('0 个任务 · 1 个自动化')

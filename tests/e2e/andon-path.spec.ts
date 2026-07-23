@@ -23,6 +23,8 @@ test('停线路径：不存在的文件触发 Andon → 取消任务', async () 
   await startButton.click()
 
   await expect(window.getByText('需要你处理')).toBeVisible({ timeout: 30000 })
+  await expect(window.getByRole('heading', { name: 'Activity' })).toBeVisible()
+  await expect(window.locator('.task-activity-feed')).toContainText('任务需要处理')
   await window.getByRole('button', { name: '取消任务' }).click()
   await expect(window.locator('.chip-gray', { hasText: 'Cancelled' })).toBeVisible({ timeout: 10000 })
 })
