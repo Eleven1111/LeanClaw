@@ -1,7 +1,7 @@
 import { homedir } from 'os'
 import { join } from 'path'
-import { getDb, initDb } from './db'
-import { handleRpc, recoverAfterRestart, syncCustomRecipes } from './api'
+import { initDb } from './db'
+import { createScheduledTask, handleRpc, recoverAfterRestart, syncCustomRecipes } from './api'
 import { subscribe } from './bus'
 import { runSmoke } from './smoke'
 import { setRuntimeConfig } from './config'
@@ -14,7 +14,6 @@ import type {
 } from './config'
 import { syncMcpFromConfig } from './mcp'
 import type { RpcRequest } from '../shared/types'
-import type { TaskView } from '../shared/types'
 import { startScheduleLoop } from './schedules'
 import { appendDiagnosticEvent } from '../main/diagnostics'
 
@@ -65,13 +64,7 @@ initDb(dataDir)
 syncCustomRecipes()
 recoverAfterRestart()
 startScheduleLoop(async (schedule) => {
-  const task = await handleRpc({
-    method: 'createTask', goal: schedule.goal, inputPath: schedule.inputPath, recipeId: schedule.recipeId,
-    ...(schedule.projectId ? { projectId: schedule.projectId } : {}),
-    ...(schedule.agentId ? { agentId: schedule.agentId } : {}),
-    ...(schedule.budgetUsd ? { budgetUsd: schedule.budgetUsd } : {})
-  }) as TaskView
-  getDb().prepare('UPDATE tasks SET schedule_id=? WHERE id=?').run(schedule.id, task.id)
+  const task = createScheduledTask(schedule)
   await handleRpc({ method: 'startTask', taskId: task.id })
 })
 

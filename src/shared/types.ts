@@ -425,6 +425,50 @@ export interface RunDetailView {
   events: RunEventDetail[]
 }
 
+export type ActivityKind =
+  | 'task'
+  | 'run'
+  | 'step'
+  | 'approval'
+  | 'andon'
+  | 'budget'
+  | 'verification'
+  | 'deliverable'
+  | 'archive'
+
+export type ActivityTone = 'neutral' | 'info' | 'success' | 'warning' | 'danger'
+export type EventActorType = 'user' | 'agent' | 'system'
+
+export interface EventActor {
+  type: EventActorType
+  id?: string
+  name?: string
+}
+
+export interface ActivityView {
+  id: string
+  seq: number
+  kind: ActivityKind
+  tone: ActivityTone
+  actorType: EventActorType
+  actorId: string | null
+  actorName: string
+  title: string
+  detail: string | null
+  taskId: string
+  runId: string | null
+  stepId: string | null
+  target:
+    | 'task'
+    | 'step'
+    | 'approval'
+    | 'andon'
+    | 'verification'
+    | 'deliverable'
+    | null
+  createdAt: string
+}
+
 export type RpcRequest =
   | { method: 'listTasks' }
   | { method: 'getTask'; taskId: string }
@@ -445,6 +489,7 @@ export type RpcRequest =
   | { method: 'getDeliverableHistory'; artifactId: string }
   | { method: 'getDataGovernanceStats' }
   | { method: 'getRunDetail'; taskId: string }
+  | { method: 'getTaskActivity'; taskId: string; limit?: number; beforeSeq?: number }
   | { method: 'savePreset'; name: string; goal: string; recipeId: string; inputPath: string }
   | { method: 'listPresets' }
   | { method: 'deletePreset'; presetId: string }

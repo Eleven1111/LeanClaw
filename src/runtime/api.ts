@@ -2,6 +2,7 @@ import { getDataDir, getDb, getSamplePath, now, uid } from './db'
 import { existsSync, readdirSync, statSync } from 'fs'
 import { join } from 'path'
 import { appendEvent, archiveTaskEvents } from './ledger'
+import { getTaskActivity } from './activity'
 import { getStatus, transition } from './state'
 import { buildRunDetail, buildTaskView, listTaskViews, publishTask } from './views'
 import { getActiveRun } from './engine'
@@ -13,6 +14,7 @@ import { fileEditRecipe, getRecipe, listRecipes, registerRecipe, unregisterRecip
 import { buildCustomRecipe } from './custom-recipe'
 import { validateCustomRecipeInput } from '../shared/custom-recipe'
 import { nextOccurrence, validateScheduleInput } from '../shared/schedule'
+import type { DueSchedule } from './schedules'
 import {
   agentDeleteBlocker,
   agentDisableBlocker,
@@ -26,6 +28,7 @@ import type {
   DeliverableDetailView,
   DeliverableHistoryView,
   DataGovernanceStats,
+  EventActor,
   InternalStatus,
   PresetView,
   ProjectView,
@@ -56,6 +59,7 @@ const REFINE_ALLOWED_STATUSES: InternalStatus[] = [
 ]
 
 const MAX_REFINE_LENGTH = 2000
+const USER_ACTOR: EventActor = { type: 'user', name: '你' }
 
 export async function handleRpc(req: RpcRequest): Promise<unknown> {
   switch (req.method) {
@@ -107,6 +111,8 @@ export async function handleRpc(req: RpcRequest): Promise<unknown> {
       return getDataGovernanceStats()
     case 'getRunDetail':
       return getRunDetail(req.taskId)
+    case 'getTaskActivity':
+      return getTaskActivity(req.taskId, req.limit, req.beforeSeq)
     case 'savePreset':
       return savePreset(req.name, req.goal, req.recipeId, req.inputPath)
     case 'listPresets':
@@ -193,7 +199,7 @@ function updateBudget(taskId: string, budgetUsd: number): TaskView {
   }
   if (!(budgetUsd > 0)) throw new Error('预算必须为正数')
   getDb().prepare('UPDATE tasks SET budget_usd = ?, updated_at = ? WHERE id = ?').run(budgetUsd, now(), taskId)
-  appendEvent(taskId, 'budget-updated', { budgetUsd })
+  appendEvent(taskId, 'budget-updated', { budgetUsd }, null, null, USER_ACTOR)
   publishTask(taskId)
   return buildTaskView(taskId)
 }
@@ -736,7 +742,8 @@ function createTask(
   recipeId?: string,
   budgetUsd?: number,
   projectId?: string,
-  agentId?: string
+  agentId?: string,
+  actor: EventActor = USER_ACTOR
 ): TaskView {
   if (!goal.trim()) throw new Error('任务目标不能为空')
   const agent = agentId
@@ -802,18 +809,39 @@ function createTask(
       now(),
       now()
     )
-  appendEvent(id, 'task-created', {
-    goal: goal.trim(),
-    inputPath: inputPath.trim(),
-    recipeId: rid,
-    budgetUsd: effectiveBudget,
-    projectId: project?.id ?? null,
-    hasProjectInstructions: Boolean(project?.saved_instructions),
-    agentId: agent?.id ?? null,
-    agentName: agent?.name ?? null,
-    hasAgentInstructions: Boolean(agent?.instructions)
-  })
+  appendEvent(
+    id,
+    'task-created',
+    {
+      goal: goal.trim(),
+      inputPath: inputPath.trim(),
+      recipeId: rid,
+      budgetUsd: effectiveBudget,
+      projectId: project?.id ?? null,
+      hasProjectInstructions: Boolean(project?.saved_instructions),
+      agentId: agent?.id ?? null,
+      agentName: agent?.name ?? null,
+      hasAgentInstructions: Boolean(agent?.instructions)
+    },
+    null,
+    null,
+    actor
+  )
   return buildTaskView(id)
+}
+
+export function createScheduledTask(schedule: DueSchedule): TaskView {
+  const task = createTask(
+    schedule.goal,
+    schedule.inputPath,
+    schedule.recipeId,
+    schedule.budgetUsd ?? undefined,
+    schedule.projectId ?? undefined,
+    schedule.agentId ?? undefined,
+    { type: 'system', name: '自动化' }
+  )
+  getDb().prepare('UPDATE tasks SET schedule_id = ? WHERE id = ?').run(schedule.id, task.id)
+  return buildTaskView(task.id)
 }
 
 function startTask(taskId: string): TaskView {
@@ -823,6 +851,7 @@ function startTask(taskId: string): TaskView {
     recipe_id: string
     project_id: string | null
     project_instructions_snapshot: string | null
+    agent_id: string | null
     agent_name_snapshot: string | null
     agent_instructions_snapshot: string | null
   }
@@ -867,7 +896,10 @@ function startTask(taskId: string): TaskView {
      VALUES (?,?,?,?,?,?, 'pending', 0)`
   )
   recipe.steps.forEach((s, i) => insertStep.run(uid(), runId, i, s.name, s.title, s.kind))
-  appendEvent(taskId, 'run-started', { recipe: recipe.id }, runId)
+  const executionActor: EventActor = task.agent_id
+    ? { type: 'agent', id: task.agent_id, name: task.agent_name_snapshot ?? 'Agent' }
+    : { type: 'system', name: '系统' }
+  appendEvent(taskId, 'run-started', { recipe: recipe.id }, runId, null, executionActor)
   transition(taskId, 'queued')
   requestRun(taskId)
   return buildTaskView(taskId)
@@ -875,13 +907,13 @@ function startTask(taskId: string): TaskView {
 
 function pauseTask(taskId: string): TaskView {
   transition(taskId, 'paused_by_user')
-  appendEvent(taskId, 'paused-by-user')
+  appendEvent(taskId, 'paused-by-user', undefined, null, null, USER_ACTOR)
   return buildTaskView(taskId)
 }
 
 function resumeTask(taskId: string): TaskView {
   transition(taskId, 'queued')
-  appendEvent(taskId, 'resumed-by-user')
+  appendEvent(taskId, 'resumed-by-user', undefined, null, null, USER_ACTOR)
   requestRun(taskId)
   return buildTaskView(taskId)
 }
@@ -899,7 +931,7 @@ function stopTask(taskId: string): TaskView {
   db.prepare(
     `UPDATE runs SET status = 'cancelled', ended_at = ? WHERE task_id = ? AND ended_at IS NULL`
   ).run(now(), taskId)
-  appendEvent(taskId, 'task-cancelled')
+  appendEvent(taskId, 'task-cancelled', undefined, null, null, USER_ACTOR)
   publishTask(taskId)
   return buildTaskView(taskId)
 }
@@ -916,7 +948,14 @@ function resolveApproval(approvalId: string, decision: 'approved' | 'rejected'):
     now(),
     approvalId
   )
-  appendEvent(appr.task_id, 'approval-resolved', { approvalId, decision })
+  appendEvent(
+    appr.task_id,
+    'approval-resolved',
+    { approvalId, decision },
+    null,
+    null,
+    USER_ACTOR
+  )
   if (decision === 'approved') {
     transition(appr.task_id, 'queued')
     requestRun(appr.task_id)
@@ -936,7 +975,14 @@ function resolveAndon(andonId: string, action: 'retry' | 'cancel'): TaskView {
   db.prepare(
     `UPDATE andon_events SET status = 'resolved', chosen_action = ?, resolved_at = ? WHERE id = ?`
   ).run(action, now(), andonId)
-  appendEvent(andon.task_id, 'andon-resolved', { andonId, action })
+  appendEvent(
+    andon.task_id,
+    'andon-resolved',
+    { andonId, action },
+    andon.run_id,
+    null,
+    USER_ACTOR
+  )
   if (action === 'cancel') return stopTask(andon.task_id)
   const resumeIdx = andon.resume_step_index ?? 0
   resetStepsFrom(andon.run_id, resumeIdx)
@@ -952,7 +998,7 @@ function retryFromCheckpoint(taskId: string): TaskView {
   const resumeIdx = run.resume_step_index ?? 0
   resetStepsFrom(run.id, resumeIdx)
   getDb().prepare('UPDATE runs SET current_step_index = ? WHERE id = ?').run(resumeIdx, run.id)
-  appendEvent(taskId, 'retry-from-checkpoint', { resumeIdx }, run.id)
+  appendEvent(taskId, 'retry-from-checkpoint', { resumeIdx }, run.id, null, USER_ACTOR)
   transition(taskId, 'queued')
   requestRun(taskId)
   return buildTaskView(taskId)
@@ -965,7 +1011,7 @@ function updateBrief(taskId: string, brief: string): TaskView {
   }
   const db = getDb()
   db.prepare('UPDATE tasks SET brief = ?, updated_at = ? WHERE id = ?').run(brief, now(), taskId)
-  appendEvent(taskId, 'brief-edited', { brief })
+  appendEvent(taskId, 'brief-edited', { brief }, null, null, USER_ACTOR)
   if (status !== 'draft') {
     const run = getActiveRun(taskId)
     if (run) {
@@ -1012,7 +1058,14 @@ function refineTask(taskId: string, instruction: string): TaskView {
     `UPDATE runs SET current_step_index = ?, resume_step_index = NULL, status = 'active', ended_at = NULL
      WHERE id = ?`
   ).run(refineIdx, run.id)
-  appendEvent(taskId, 'refine-requested', { instruction: text }, run.id)
+  appendEvent(
+    taskId,
+    'refine-requested',
+    { instruction: text },
+    run.id,
+    null,
+    USER_ACTOR
+  )
   transition(taskId, 'queued')
   requestRun(taskId)
   return buildTaskView(taskId)
@@ -1020,7 +1073,7 @@ function refineTask(taskId: string, instruction: string): TaskView {
 
 function archiveTask(taskId: string): TaskView {
   transition(taskId, 'archived')
-  appendEvent(taskId, 'task-archived')
+  appendEvent(taskId, 'task-archived', undefined, null, null, USER_ACTOR)
   archiveTaskEvents(taskId)
   return buildTaskView(taskId)
 }
@@ -1031,7 +1084,7 @@ function archiveAllDelivered(): { count: number } {
   }[]
   for (const row of rows) {
     transition(row.id, 'archived')
-    appendEvent(row.id, 'task-archived')
+    appendEvent(row.id, 'task-archived', undefined, null, null, USER_ACTOR)
     archiveTaskEvents(row.id)
   }
   return { count: rows.length }

@@ -10,7 +10,7 @@ import { getRecipe, type StepContext } from './recipe'
 import { requestRun } from './scheduler'
 import { parseRefineInstructions } from '../shared/verify'
 import { applyInstructionSnapshots } from '../shared/instructions'
-import type { ModelTier } from '../shared/types'
+import type { EventActor, ModelTier } from '../shared/types'
 
 const MAX_ATTEMPTS = 3
 
@@ -32,6 +32,8 @@ interface TaskRow {
   brief?: string | null
   refine_instructions?: string | null
   project_instructions_snapshot?: string | null
+  agent_id?: string | null
+  agent_name_snapshot?: string | null
   agent_instructions_snapshot?: string | null
 }
 
@@ -69,7 +71,8 @@ export function openAndon(
   reason: string,
   impact: string,
   actions: string[],
-  resumeStepIndex: number
+  resumeStepIndex: number,
+  actor: EventActor = { type: 'system' }
 ): void {
   const db = getDb()
   let finalReason = reason
@@ -91,8 +94,18 @@ export function openAndon(
      (id, task_id, run_id, step_id, reason, impact, recommended_actions, resume_step_index, status, created_at)
      VALUES (?,?,?,?,?,?,?,?, 'open', ?)`
   ).run(uid(), taskId, runId, stepId, finalReason, impact, JSON.stringify(finalActions), resumeStepIndex, now())
-  appendEvent(taskId, 'andon-opened', { reason: finalReason }, runId, stepId)
+  appendEvent(taskId, 'andon-opened', { reason: finalReason }, runId, stepId, actor)
   transition(taskId, 'andon_open')
+}
+
+function executionActor(task: TaskRow): EventActor {
+  return task.agent_id
+    ? {
+        type: 'agent',
+        id: task.agent_id,
+        name: task.agent_name_snapshot?.trim() || 'Agent'
+      }
+    : { type: 'system', name: '系统' }
 }
 
 export async function drive(taskId: string): Promise<void> {
@@ -117,6 +130,7 @@ async function loop(taskId: string): Promise<void> {
     const run = getActiveRun(taskId)
     if (!run) return
     const recipe = getRecipe(run.recipe_id)
+    const actor = executionActor(task)
     const tpl = recipe.steps[run.current_step_index]
     if (!tpl) return
     const step = getDb()
@@ -126,7 +140,14 @@ async function loop(taskId: string): Promise<void> {
     getDb()
       .prepare(`UPDATE steps SET status = 'running', started_at = COALESCE(started_at, ?) WHERE id = ?`)
       .run(now(), step.id)
-    appendEvent(taskId, 'step-started', { name: tpl.name, idx: run.current_step_index }, run.id, step.id)
+    appendEvent(
+      taskId,
+      'step-started',
+      { name: tpl.name, idx: run.current_step_index },
+      run.id,
+      step.id,
+      actor
+    )
     publishTask(taskId)
     const ctx = makeCtx(task, run, step, tpl)
     try {
@@ -137,7 +158,14 @@ async function loop(taskId: string): Promise<void> {
       getDb()
         .prepare('UPDATE runs SET current_step_index = ? WHERE id = ?')
         .run(run.current_step_index + 1, run.id)
-      appendEvent(taskId, 'step-completed', { name: tpl.name, summary }, run.id, step.id)
+      appendEvent(
+        taskId,
+        'step-completed',
+        { name: tpl.name, summary },
+        run.id,
+        step.id,
+        actor
+      )
       if (getStatus(taskId) === 'delivered') {
         publishTask(taskId)
         return
@@ -158,7 +186,8 @@ async function loop(taskId: string): Promise<void> {
         'step-error',
         { name: tpl.name, attempt, message, retryable },
         run.id,
-        step.id
+        step.id,
+        actor
       )
       if (retryable && attempt < MAX_ATTEMPTS) {
         transition(taskId, 'step_retrying')
@@ -178,7 +207,8 @@ async function loop(taskId: string): Promise<void> {
           : `步骤「${tpl.title}」失败：${message}`,
         '任务已停线；此前步骤的产物仍然有效，可从当前步骤恢复。',
         ['retry', 'cancel'],
-        run.current_step_index
+        run.current_step_index,
+        actor
       )
       return
     }
@@ -201,6 +231,7 @@ function makeCtx(task: TaskRow, run: RunRow, step: StepRow, tpl: { tier?: ModelT
     allowedDirs: task.input_path ? [getWorkspaceDir(), dirname(task.input_path)] : [getWorkspaceDir()]
   }
   const db = getDb()
+  const actor = executionActor(task)
 
   return {
     taskId: task.id,
@@ -215,7 +246,14 @@ function makeCtx(task: TaskRow, run: RunRow, step: StepRow, tpl: { tier?: ModelT
       const tool = getTool(toolId)
       const risk = tool.riskFor(input, toolCtx)
       if (risk === 'forbidden') {
-        appendEvent(task.id, 'tool-forbidden', { toolId, input: sanitize(input) }, run.id, step.id)
+        appendEvent(
+          task.id,
+          'tool-forbidden',
+          { toolId, input: sanitize(input) },
+          run.id,
+          step.id,
+          actor
+        )
         openAndon(
           task.id,
           run.id,
@@ -223,7 +261,8 @@ function makeCtx(task: TaskRow, run: RunRow, step: StepRow, tpl: { tier?: ModelT
           `策略禁止执行「${tool.name}」：目标路径不在允许目录内`,
           '该动作未被执行，任务已停线。',
           ['cancel'],
-          run.current_step_index
+          run.current_step_index,
+          actor
         )
         throw new Suspend()
       }
@@ -252,7 +291,14 @@ function makeCtx(task: TaskRow, run: RunRow, step: StepRow, tpl: { tier?: ModelT
             String(dry.data?.diff ?? ''),
             now()
           )
-          appendEvent(task.id, 'approval-requested', { toolId }, run.id, step.id)
+          appendEvent(
+            task.id,
+            'approval-requested',
+            { toolId },
+            run.id,
+            step.id,
+            actor
+          )
           transition(task.id, 'awaiting_approval')
           throw new Suspend()
         }
@@ -272,7 +318,14 @@ function makeCtx(task: TaskRow, run: RunRow, step: StepRow, tpl: { tier?: ModelT
           now(),
           tcId
         )
-        appendEvent(task.id, 'tool-call', { toolId, summary: res.summary }, run.id, step.id)
+        appendEvent(
+          task.id,
+          'tool-call',
+          { toolId, summary: res.summary },
+          run.id,
+          step.id,
+          actor
+        )
         return res
       } catch (e) {
         db.prepare(`UPDATE tool_calls SET status = 'error', error = ?, ended_at = ? WHERE id = ?`).run(
@@ -294,7 +347,14 @@ function makeCtx(task: TaskRow, run: RunRow, step: StepRow, tpl: { tier?: ModelT
       if (hasBudget) {
         before = getTaskCost(db, task.id)
         if (before >= (budget as number)) {
-          appendEvent(task.id, 'budget-exhausted', { before, budget }, run.id, step.id)
+          appendEvent(
+            task.id,
+            'budget-exhausted',
+            { before, budget },
+            run.id,
+            step.id,
+            actor
+          )
           openAndon(
             task.id,
             run.id,
@@ -302,7 +362,8 @@ function makeCtx(task: TaskRow, run: RunRow, step: StepRow, tpl: { tier?: ModelT
             `预算已用尽（$${before.toFixed(4)}/$${(budget as number).toFixed(2)}）`,
             '此前步骤的产物仍然有效；可追加预算后重试当前步骤。',
             ['retry', 'cancel'],
-            run.current_step_index
+            run.current_step_index,
+            actor
           )
           throw new Suspend()
         }
@@ -318,14 +379,28 @@ function makeCtx(task: TaskRow, run: RunRow, step: StepRow, tpl: { tier?: ModelT
         tpl.tier
       )
       if (r.fallback) {
-        appendEvent(task.id, 'model-fallback', r.fallback, run.id, step.id)
+        appendEvent(task.id, 'model-fallback', r.fallback, run.id, step.id, actor)
       }
-      appendEvent(task.id, 'model-call', { model: r.model, tokensOut: r.tokensOut }, run.id, step.id)
+      appendEvent(
+        task.id,
+        'model-call',
+        { model: r.model, tokensOut: r.tokensOut },
+        run.id,
+        step.id,
+        actor
+      )
       if (hasBudget) {
         const b = budget as number
         const after = before + r.costUsd
         if (before < b * 0.8 && after >= b * 0.8) {
-          appendEvent(task.id, 'budget-warning', { after, budget: b }, run.id, step.id)
+          appendEvent(
+            task.id,
+            'budget-warning',
+            { after, budget: b },
+            run.id,
+            step.id,
+            actor
+          )
           publishTask(task.id)
         }
       }
@@ -365,7 +440,14 @@ function makeCtx(task: TaskRow, run: RunRow, step: StepRow, tpl: { tier?: ModelT
         now()
       )
       if (prev) db.prepare('UPDATE artifacts SET superseded_by = ? WHERE id = ?').run(id, prev.id)
-      appendEvent(task.id, 'artifact-created', { type: a.type, title: a.title, version }, run.id, step.id)
+      appendEvent(
+        task.id,
+        'artifact-created',
+        { type: a.type, title: a.title, version },
+        run.id,
+        step.id,
+        actor
+      )
       return id
     },
 
@@ -425,13 +507,27 @@ function makeCtx(task: TaskRow, run: RunRow, step: StepRow, tpl: { tier?: ModelT
           artifactId
         )
       }
-      appendEvent(task.id, 'verification', { kind, status, detail }, run.id, step.id)
+      appendEvent(
+        task.id,
+        'verification',
+        { kind, status, detail },
+        run.id,
+        step.id,
+        actor
+      )
     },
 
     failVerification(detail, resumeStepIndex): never {
       db.prepare('UPDATE runs SET resume_step_index = ? WHERE id = ?').run(resumeStepIndex, run.id)
       db.prepare(`UPDATE steps SET status = 'failed', ended_at = ? WHERE id = ?`).run(now(), step.id)
-      appendEvent(task.id, 'verification-blocked', { detail, resumeStepIndex }, run.id, step.id)
+      appendEvent(
+        task.id,
+        'verification-blocked',
+        { detail, resumeStepIndex },
+        run.id,
+        step.id,
+        actor
+      )
       transition(task.id, 'verification_failed')
       throw new Suspend()
     },
@@ -439,7 +535,7 @@ function makeCtx(task: TaskRow, run: RunRow, step: StepRow, tpl: { tier?: ModelT
     markDelivered(artifactId) {
       db.prepare('UPDATE artifacts SET is_deliverable = 1 WHERE id = ?').run(artifactId)
       db.prepare(`UPDATE runs SET status = 'done', ended_at = ? WHERE id = ?`).run(now(), run.id)
-      appendEvent(task.id, 'delivered', { artifactId }, run.id, step.id)
+      appendEvent(task.id, 'delivered', { artifactId }, run.id, step.id, actor)
       transition(task.id, 'delivered')
     },
 

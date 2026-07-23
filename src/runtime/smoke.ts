@@ -1,7 +1,7 @@
 import { join } from 'path'
 import { existsSync } from 'fs'
 import { getDb, getSamplePath, getWorkspaceDir } from './db'
-import { handleRpc } from './api'
+import { createScheduledTask, handleRpc } from './api'
 import { subscribe } from './bus'
 import { getRuntimeConfig, resolveConfig, setRuntimeConfig } from './config'
 import { getMcpStatus, shutdownAllMcp, syncMcpFromConfig } from './mcp'
@@ -74,6 +74,12 @@ function runAgentMigrationSmoke(): void {
   const scheduleColumns = (
     db.prepare('PRAGMA table_info(schedules)').all() as { name: string }[]
   ).map((column) => column.name)
+  const eventColumns = (
+    db.prepare('PRAGMA table_info(run_events)').all() as { name: string }[]
+  ).map((column) => column.name)
+  const archivedEventColumns = (
+    db.prepare('PRAGMA table_info(run_events_archive)').all() as { name: string }[]
+  ).map((column) => column.name)
   const task = db
     .prepare(
       `SELECT agent_id as agentId, agent_name_snapshot as agentName,
@@ -86,22 +92,39 @@ function runAgentMigrationSmoke(): void {
   const schedule = db
     .prepare(`SELECT agent_id as agentId FROM schedules WHERE id = 'legacy-schedule'`)
     .get() as { agentId: string | null } | undefined
+  const legacyEvent = db
+    .prepare(
+      `SELECT actor_type as actorType, actor_id as actorId,
+              actor_name_snapshot as actorName
+       FROM run_events
+       WHERE task_id = 'legacy-task'
+       ORDER BY seq LIMIT 1`
+    )
+    .get() as
+    | { actorType: string | null; actorId: string | null; actorName: string | null }
+    | undefined
   const pass =
-    version === 10 &&
+    version === 11 &&
     agentTable &&
     ['agent_id', 'agent_name_snapshot', 'agent_instructions_snapshot'].every((column) =>
       taskColumns.includes(column)
     ) &&
     scheduleColumns.includes('agent_id') &&
+    ['actor_type', 'actor_id', 'actor_name_snapshot'].every(
+      (column) => eventColumns.includes(column) && archivedEventColumns.includes(column)
+    ) &&
     task?.agentId === null &&
     task.agentName === null &&
     task.agentInstructions === null &&
-    schedule?.agentId === null
+    schedule?.agentId === null &&
+    legacyEvent?.actorType === null &&
+    legacyEvent.actorId === null &&
+    legacyEvent.actorName === null
   out(
     `[agent-migration] version=${version} agents=${agentTable ? 'yes' : 'no'} ` +
       `legacyTask=${task ? 'kept' : 'missing'} legacySchedule=${schedule ? 'kept' : 'missing'}`
   )
-  out(pass ? '[smoke] PASS（v8 → v10 Agent 迁移零丢失）' : '[smoke] FAIL（Agent 迁移）')
+  out(pass ? '[smoke] PASS（v8 → v11 Agent/Activity 迁移零丢失）' : '[smoke] FAIL（Agent/Activity 迁移）')
   process.exit(pass ? 0 : 1)
 }
 
@@ -324,15 +347,7 @@ async function runAgentBindingSmoke(): Promise<void> {
     .run(new Date(at.getTime() - 1000).toISOString(), schedule.id)
   const scheduledHolder: { task?: TaskView } = {}
   await runDueSchedules(async (due) => {
-    scheduledHolder.task = (await handleRpc({
-      method: 'createTask',
-      goal: due.goal,
-      inputPath: due.inputPath,
-      recipeId: due.recipeId,
-      ...(due.projectId ? { projectId: due.projectId } : {}),
-      ...(due.agentId ? { agentId: due.agentId } : {}),
-      ...(due.budgetUsd ? { budgetUsd: due.budgetUsd } : {})
-    })) as TaskView
+    scheduledHolder.task = createScheduledTask(due)
   }, at)
   const scheduledTask = scheduledHolder.task
   const scheduledRow = scheduledTask
@@ -345,6 +360,16 @@ async function runAgentBindingSmoke(): Promise<void> {
         agentInstructions: string | null
       }
     : null
+  const scheduledActor = scheduledTask
+    ? getDb()
+        .prepare(
+          `SELECT actor_type as actorType, actor_name_snapshot as actorName
+           FROM run_events WHERE task_id = ? AND type = 'task-created'`
+        )
+        .get(scheduledTask.id) as
+        | { actorType: string | null; actorName: string | null }
+        | undefined
+    : undefined
   const approvalsPassed =
     originalTask.approvals.length === 1 &&
     originalTask.approvals.every((approval) => approval.status === 'approved')
@@ -364,11 +389,14 @@ async function runAgentBindingSmoke(): Promise<void> {
     enableScheduleBlocked &&
     scheduledRow?.agentName === currentName &&
     scheduledRow.agentInstructions === currentInstructions &&
+    scheduledActor?.actorType === 'system' &&
+    scheduledActor.actorName === '自动化' &&
     approvalsPassed &&
     verificationsPassed
   out(
     `[agent-binding] status=${finalStatus} snapshot=${originalRow.agentName === originalName} ` +
       `defaults=${originalRow.recipeId}/${originalRow.budgetUsd} scheduleSnapshot=${scheduledRow?.agentName} ` +
+      `scheduleActor=${scheduledActor?.actorType}/${scheduledActor?.actorName} ` +
       `guards=${disableBlocked}/${disabledTaskBlocked}/${enableScheduleBlocked} ` +
       `approvals=${approvalsPassed} verify=${verificationsPassed}`
   )
@@ -384,8 +412,7 @@ async function runScheduleSmoke(): Promise<void> {
   }) as { id: string }
   getDb().prepare('UPDATE schedules SET next_run_at=? WHERE id=?').run(new Date(at.getTime() - 1000).toISOString(), schedule.id)
   const trigger = async (due: DueSchedule): Promise<void> => {
-    const task = await handleRpc({ method: 'createTask', goal: due.goal, inputPath: due.inputPath, recipeId: due.recipeId }) as TaskView
-    getDb().prepare('UPDATE tasks SET schedule_id=? WHERE id=?').run(due.id, task.id)
+    const task = createScheduledTask(due)
     await handleRpc({ method: 'startTask', taskId: task.id })
   }
   await runDueSchedules(trigger, at)

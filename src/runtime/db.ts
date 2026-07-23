@@ -155,6 +155,9 @@ CREATE TABLE IF NOT EXISTS run_events (
   step_id TEXT,
   type TEXT NOT NULL,
   payload TEXT,
+  actor_type TEXT,
+  actor_id TEXT,
+  actor_name_snapshot TEXT,
   created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS run_events_archive (
@@ -164,6 +167,9 @@ CREATE TABLE IF NOT EXISTS run_events_archive (
   step_id TEXT,
   type TEXT NOT NULL,
   payload TEXT,
+  actor_type TEXT,
+  actor_id TEXT,
+  actor_name_snapshot TEXT,
   created_at TEXT NOT NULL,
   archived_at TEXT NOT NULL
 );
@@ -388,6 +394,22 @@ export const MIGRATIONS: Migration[] = [
       }
       if (!hasColumn(database, 'schedules', 'agent_id')) {
         database.exec('ALTER TABLE schedules ADD COLUMN agent_id TEXT')
+      }
+    }
+  },
+  {
+    version: 11,
+    up(database) {
+      for (const table of ['run_events', 'run_events_archive']) {
+        if (!hasColumn(database, table, 'actor_type')) {
+          database.exec(`ALTER TABLE ${table} ADD COLUMN actor_type TEXT`)
+        }
+        if (!hasColumn(database, table, 'actor_id')) {
+          database.exec(`ALTER TABLE ${table} ADD COLUMN actor_id TEXT`)
+        }
+        if (!hasColumn(database, table, 'actor_name_snapshot')) {
+          database.exec(`ALTER TABLE ${table} ADD COLUMN actor_name_snapshot TEXT`)
+        }
       }
     }
   }
