@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { AgentView, PresetView, TaskView } from '../../shared/types'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { AgentView, PresetView, RuntimeOverviewView, TaskView } from '../../shared/types'
 import { Home } from './Home'
-import { Settings } from './Settings'
+import { Settings, type SettingsSection } from './Settings'
 import { TaskWorkspace } from './TaskWorkspace'
 import { Deliverables } from './Deliverables'
 import { Library } from './Library'
@@ -9,6 +9,7 @@ import { RunInspector } from './RunInspector'
 import { Tasks } from './Tasks'
 import { Projects } from './Projects'
 import { Agents } from './Agents'
+import { RuntimeCenter, runtimeOverallLabel } from './RuntimeCenter'
 import type { TaskFilter } from './Tasks'
 import { CommandPalette, type PaletteCommand } from './CommandPalette'
 import appIconUrl from '../../../resources/icon.png'
@@ -21,6 +22,7 @@ type ViewId =
   | 'agents'
   | 'deliverables'
   | 'library'
+  | 'runtime'
   | 'settings'
   | 'inspector'
 
@@ -41,6 +43,7 @@ const NAV_ITEMS: { id: ViewId; label: string; title: string; group: NavGroup }[]
   { id: 'agents', label: 'Agent', title: 'Agent', group: 'workspace' },
   { id: 'deliverables', label: 'Deliverables', title: '交付物', group: 'assets' },
   { id: 'library', label: 'Library', title: '能力库', group: 'assets' },
+  { id: 'runtime', label: 'Runtime', title: '运行时', group: 'system' },
   { id: 'settings', label: 'Settings', title: '设置', group: 'system' }
 ]
 
@@ -58,6 +61,7 @@ const PAGE_TITLES: Record<ViewId, string> = {
   agents: 'Agent',
   deliverables: '交付物',
   library: '能力库',
+  runtime: '运行时',
   settings: '设置',
   inspector: '运行检查'
 }
@@ -70,6 +74,41 @@ export function App(): React.JSX.Element {
   const [initialTasksFilter, setInitialTasksFilter] = useState<TaskFilter | undefined>(undefined)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [inspectorStepId, setInspectorStepId] = useState<string | null>(null)
+  const [settingsSection, setSettingsSection] = useState<SettingsSection | undefined>(undefined)
+  const [runtimeOverview, setRuntimeOverview] = useState<RuntimeOverviewView | null>(null)
+  const [runtimeLoading, setRuntimeLoading] = useState(true)
+  const [runtimeError, setRuntimeError] = useState('')
+  const runtimeRequest = useRef<Promise<void> | null>(null)
+  const runtimeRefreshQueued = useRef(false)
+  const contentArea = useRef<HTMLDivElement | null>(null)
+
+  const refreshRuntimeOverview = useCallback((): Promise<void> => {
+    if (runtimeRequest.current) {
+      runtimeRefreshQueued.current = true
+      return runtimeRequest.current
+    }
+    setRuntimeLoading(true)
+    setRuntimeError('')
+    const request = (async () => {
+      try {
+        const overview = (await window.api.rpc({
+          method: 'getRuntimeOverview'
+        })) as RuntimeOverviewView
+        setRuntimeOverview(overview)
+      } catch {
+        setRuntimeError('刷新失败，当前显示上一次安全状态。')
+      } finally {
+        setRuntimeLoading(false)
+        runtimeRequest.current = null
+        if (runtimeRefreshQueued.current) {
+          runtimeRefreshQueued.current = false
+          void refreshRuntimeOverview()
+        }
+      }
+    })()
+    runtimeRequest.current = request
+    return request
+  }, [])
 
   const refresh = useCallback(async () => {
     const list = (await window.api.rpc({ method: 'listTasks' })) as TaskView[]
@@ -81,9 +120,16 @@ export function App(): React.JSX.Element {
     return window.api.onPush((e) => {
       if (e.type === 'task') {
         setTasks((prev) => ({ ...prev, [e.task.id]: e.task }))
+        void refreshRuntimeOverview()
       }
     })
-  }, [refresh])
+  }, [refresh, refreshRuntimeOverview])
+
+  useEffect(() => {
+    void refreshRuntimeOverview()
+    const timer = window.setInterval(() => void refreshRuntimeOverview(), 15_000)
+    return () => window.clearInterval(timer)
+  }, [refreshRuntimeOverview])
 
   const list = Object.values(tasks).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   const current = selectedTaskId ? tasks[selectedTaskId] : null
@@ -94,11 +140,20 @@ export function App(): React.JSX.Element {
   }
 
   const navigate = (id: ViewId): void => {
+    contentArea.current?.scrollTo({ top: 0 })
     setSelectedTaskId(null)
     setInitialPreset(undefined)
     setInitialTasksFilter(undefined)
     setInspectorStepId(null)
+    setSettingsSection(undefined)
     setView(id)
+  }
+
+  const openSettings = (section: SettingsSection): void => {
+    contentArea.current?.scrollTo({ top: 0 })
+    setSelectedTaskId(null)
+    setSettingsSection(section)
+    setView('settings')
   }
 
   const openTasksFiltered = (filter: TaskFilter): void => {
@@ -212,8 +267,23 @@ export function App(): React.JSX.Element {
     content = <Deliverables onOpenTask={openTask} />
   } else if (view === 'library') {
     content = <Library onUseRecipe={useRecipeAsTask} onUsePreset={usePresetAsTask} />
+  } else if (view === 'runtime') {
+    content = (
+      <RuntimeCenter
+        overview={runtimeOverview}
+        loading={runtimeLoading}
+        error={runtimeError}
+        onRefresh={refreshRuntimeOverview}
+        onOpenSettings={openSettings}
+      />
+    )
   } else if (view === 'settings') {
-    content = <Settings onBack={() => navigate('home')} />
+    content = (
+      <Settings
+        initialSection={settingsSection}
+        onBack={() => navigate(settingsSection ? 'runtime' : 'home')}
+      />
+    )
   } else {
     content = (
       <Home
@@ -228,6 +298,8 @@ export function App(): React.JSX.Element {
   const activeNav = view === 'task' ? 'home' : view === 'inspector' ? '' : view
   const runningCount = list.filter((task) => ['Planning', 'Running', 'Verifying'].includes(task.userStatus)).length
   const deliveredCount = list.filter((task) => task.userStatus === 'Delivered').length
+  const runtimeOverall = runtimeOverview?.overall
+  const runtimeLabel = runtimeOverall ? runtimeOverallLabel(runtimeOverall) : '检查中'
 
   const navCount = (id: ViewId): number | null => {
     if (id === 'tasks') return list.length
@@ -267,6 +339,7 @@ export function App(): React.JSX.Element {
                 return (
                   <button
                     key={item.id}
+                    aria-label={item.id === 'runtime' ? item.label : undefined}
                     className={`sidebar-item ${activeNav === item.id ? 'active' : ''}`}
                     onClick={() => navigate(item.id)}
                   >
@@ -287,15 +360,21 @@ export function App(): React.JSX.Element {
             </div>
           ))}
         </div>
-        <div className="sidebar-footer">
-          <span className={`runtime-dot ${runningCount > 0 ? 'active' : ''}`} />
+        <button
+          className="sidebar-footer"
+          aria-label={`运行时状态：${runtimeLabel}`}
+          onClick={() => navigate('runtime')}
+        >
+          <span className={`runtime-dot ${runtimeOverall ?? 'checking'}`} />
           <div>
-            <strong>{runningCount > 0 ? `${runningCount} 个任务执行中` : '运行时已就绪'}</strong>
+            <strong>{runtimeOverall === 'busy' && runtimeOverview
+              ? `${runtimeOverview.runtime.activeTasks} 个任务执行中`
+              : `运行时${runtimeLabel}`}</strong>
             <span>本机数据 · 隐私优先</span>
           </div>
-        </div>
+        </button>
       </nav>
-      <div className="content-area">
+      <div className="content-area" ref={contentArea}>
         <header className="topbar">
           <h1 className="page-title" aria-label={view === 'tasks' ? 'Tasks' : undefined}>
             {PAGE_TITLES[view]}

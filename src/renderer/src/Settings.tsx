@@ -7,7 +7,15 @@ import { ProvidersSettings } from './ProvidersSettings'
 const MODEL_PRESETS = ['claude-sonnet-5', 'claude-opus-4-8', 'claude-haiku-4-5-20251001']
 const CUSTOM_MODEL = '__custom__'
 
-export function Settings({ onBack }: { onBack: () => void }): React.JSX.Element {
+export type SettingsSection = 'providers' | 'mcp' | 'shell' | 'diagnostics'
+
+export function Settings({
+  onBack,
+  initialSection
+}: {
+  onBack: () => void
+  initialSection?: SettingsSection
+}): React.JSX.Element {
   const [settings, setSettings] = useState<SettingsView | null>(null)
   const [keyDraft, setKeyDraft] = useState('')
   const [keyBusy, setKeyBusy] = useState(false)
@@ -60,6 +68,14 @@ export function Settings({ onBack }: { onBack: () => void }): React.JSX.Element 
     void window.api.getSettings().then(applySettings)
     void window.api.rpc({ method: 'getDataGovernanceStats' }).then((result) => setGovernanceStats(result as DataGovernanceStats))
   }, [])
+
+  useEffect(() => {
+    if (!settings || !initialSection) return
+    const target = document.getElementById(`settings-${initialSection}`)
+    if (!target) return
+    target.scrollIntoView({ block: 'start' })
+    target.focus({ preventScroll: true })
+  }, [initialSection, settings])
 
   const saveKey = async (): Promise<void> => {
     setKeyBusy(true)
@@ -246,13 +262,29 @@ export function Settings({ onBack }: { onBack: () => void }): React.JSX.Element 
         </div>
       </section>
 
-      <ProvidersSettings encryptionAvailable={settings.encryptionAvailable} />
+      <div
+        id="settings-providers"
+        className={`settings-anchor ${initialSection === 'providers' ? 'targeted' : ''}`}
+        tabIndex={-1}
+      >
+        <ProvidersSettings encryptionAvailable={settings.encryptionAvailable} />
+      </div>
 
       <ModelRoutingSettings />
 
-      <McpSettings encryptionAvailable={settings.encryptionAvailable} />
+      <div
+        id="settings-mcp"
+        className={`settings-anchor ${initialSection === 'mcp' ? 'targeted' : ''}`}
+        tabIndex={-1}
+      >
+        <McpSettings encryptionAvailable={settings.encryptionAvailable} />
+      </div>
 
-      <section>
+      <section
+        id="settings-shell"
+        className={`settings-anchor ${initialSection === 'shell' ? 'targeted' : ''}`}
+        tabIndex={-1}
+      >
         <h2>Shell 命令</h2>
         <div className="input-card">
           <label className="input-row meta">
@@ -417,7 +449,11 @@ export function Settings({ onBack }: { onBack: () => void }): React.JSX.Element 
         </div>
       </section>
 
-      <section>
+      <section
+        id="settings-diagnostics"
+        className={`settings-anchor ${initialSection === 'diagnostics' ? 'targeted' : ''}`}
+        tabIndex={-1}
+      >
         <h2>诊断与日志</h2>
         <div className="input-card">
           <p className="sub">导出版本、系统信息和轮转日志；不包含任务内容、数据库、API Key 或 MCP 密钥。</p>
