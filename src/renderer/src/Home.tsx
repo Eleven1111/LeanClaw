@@ -110,6 +110,7 @@ export function Home({
         inputPath: requiresInput ? inputPath : '',
         recipeId,
         ...(projectId ? { projectId } : {}),
+        ...(agentId ? { agentId } : {}),
         ...(budgetUsd !== undefined ? { budgetUsd } : {})
       })) as TaskView
       await window.api.rpc({ method: 'startTask', taskId: t.id })
@@ -218,6 +219,7 @@ export function Home({
         disabled={!goal.trim() || (requiresInput && !inputPath.trim())}
         template={{ goal, inputPath: requiresInput ? inputPath : '', recipeId,
           ...(projectId ? { projectId } : {}),
+          ...(agentId ? { agentId } : {}),
           ...(budgetDraft.trim() ? { budgetUsd: Number(budgetDraft) } : {}) }}
       />
 

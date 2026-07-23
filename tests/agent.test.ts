@@ -3,6 +3,7 @@ import {
   agentColorIndex,
   agentDeleteBlocker,
   agentDisableBlocker,
+  resolveAgentTaskDefaults,
   validateAgentInput
 } from '../src/shared/agent'
 
@@ -96,6 +97,43 @@ describe('Agent 引用保护', () => {
   it('只有启用中的 Schedule 引用才阻止停用', () => {
     expect(agentDisableBlocker(1)).toMatch(/暂停或改绑/)
     expect(agentDisableBlocker(0)).toBeNull()
+  })
+})
+
+describe('Agent 任务默认值', () => {
+  const defaults = {
+    fallbackRecipeId: 'file-edit-summarize',
+    defaultBudgetUsd: 4
+  }
+
+  it('未选择 Agent 时保持旧的 Recipe 与全局预算路径', () => {
+    expect(resolveAgentTaskDefaults({}, null, defaults)).toEqual({
+      recipeId: 'file-edit-summarize',
+      budgetUsd: 4
+    })
+  })
+
+  it('选择 Agent 时使用 Agent 默认 Recipe 与预算', () => {
+    expect(resolveAgentTaskDefaults({}, {
+      defaultRecipeId: 'deep-research',
+      defaultBudgetUsd: 2
+    }, defaults)).toEqual({
+      recipeId: 'deep-research',
+      budgetUsd: 2
+    })
+  })
+
+  it('用户显式覆盖优先于 Agent 默认值', () => {
+    expect(resolveAgentTaskDefaults({
+      recipeId: 'content-pack',
+      budgetUsd: 1.25
+    }, {
+      defaultRecipeId: 'deep-research',
+      defaultBudgetUsd: 2
+    }, defaults)).toEqual({
+      recipeId: 'content-pack',
+      budgetUsd: 1.25
+    })
   })
 })
 

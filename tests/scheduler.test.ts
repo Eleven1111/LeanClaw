@@ -1,8 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { dequeueNext, enqueue, queuePositionOf, release, requestRun } from '../src/runtime/scheduler'
+import {
+  agentCapacityAvailable,
+  dequeueNext,
+  enqueue,
+  queuePositionOf,
+  release,
+  requestRun
+} from '../src/runtime/scheduler'
 
 const driveMock = vi.fn()
 const getStatusMock = vi.fn()
+const getAgentPolicyMock = vi.fn()
 
 vi.mock('../src/runtime/engine', () => ({
   drive: (...args: unknown[]) => driveMock(...args)
@@ -12,6 +20,13 @@ vi.mock('../src/runtime/state', () => ({
 }))
 vi.mock('../src/runtime/config', () => ({
   getRuntimeConfig: () => ({ maxActiveTasks: 3 })
+}))
+vi.mock('../src/runtime/db', () => ({
+  getDb: () => ({
+    prepare: () => ({
+      get: (...args: unknown[]) => getAgentPolicyMock(...args)
+    })
+  })
 }))
 
 function deferred<T>(): { promise: Promise<T>; resolve: (v: T) => void } {
@@ -73,10 +88,27 @@ describe('queuePositionOf（1-based 位次）', () => {
   })
 })
 
+describe('Agent 并发容量', () => {
+  it('无 Agent 的任务不受 Agent 容量限制', () => {
+    expect(agentCapacityAvailable(['agent-a'], null, 1)).toBe(true)
+  })
+
+  it('同一 Agent 达到上限时排队', () => {
+    expect(agentCapacityAvailable(['agent-a'], 'agent-a', 1)).toBe(false)
+    expect(agentCapacityAvailable(['agent-a'], 'agent-a', 2)).toBe(true)
+  })
+
+  it('不同 Agent 各自拥有独立容量', () => {
+    expect(agentCapacityAvailable(['agent-a'], 'agent-b', 1)).toBe(true)
+  })
+})
+
 describe('requestRun / release（技术债 #11：活跃任务重入不再静默丢弃）', () => {
   beforeEach(() => {
     driveMock.mockReset()
     getStatusMock.mockReset()
+    getAgentPolicyMock.mockReset()
+    getAgentPolicyMock.mockReturnValue({ agentId: null, maxConcurrentRuns: null })
   })
 
   it('对活跃中任务重入请求标记 pendingRerun，release 时若仍 queued 则重新驱动', async () => {
@@ -125,5 +157,32 @@ describe('requestRun / release（技术债 #11：活跃任务重入不再静默�
     await flushMicrotasks()
     // 无重入标记，drive 完成后应走队列分支（队列为空，不再次驱动）
     expect(driveMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('同一 Agent 达到上限时排队，但不同 Agent 可占用另一全局槽位', async () => {
+    const pending = new Map<string, ReturnType<typeof deferred<void>>>()
+    driveMock.mockImplementation((taskId: string) => {
+      const task = deferred<void>()
+      pending.set(taskId, task)
+      return task.promise
+    })
+    getStatusMock.mockReturnValue('queued')
+    getAgentPolicyMock.mockImplementation((taskId: string) => ({
+      agentId: taskId.startsWith('a') ? 'agent-a' : 'agent-b',
+      maxConcurrentRuns: 1
+    }))
+
+    requestRun('a-1')
+    requestRun('a-2')
+    requestRun('b-1')
+    expect(driveMock.mock.calls.map(([taskId]) => taskId)).toEqual(['a-1', 'b-1'])
+
+    pending.get('a-1')?.resolve()
+    await flushMicrotasks()
+    expect(driveMock.mock.calls.map(([taskId]) => taskId)).toEqual(['a-1', 'b-1', 'a-2'])
+
+    pending.get('b-1')?.resolve()
+    pending.get('a-2')?.resolve()
+    await flushMicrotasks()
   })
 })

@@ -93,6 +93,11 @@ function TaskListRow({
       <button className="task-row-main" onClick={() => onOpen(t.id)}>
         <span className="task-goal">{t.goal}</span>
         <span className="task-progress">{currentStepPhrase(t)}</span>
+        {t.agentName && (
+          <span className="task-agent" title={`Agent · ${t.agentName}`}>
+            Agent · {t.agentName}
+          </span>
+        )}
         {t.queuePosition !== null && <span className="queue-badge">排队中 · 第 {t.queuePosition} 位</span>}
         <StatusChip s={t.userStatus} />
       </button>
@@ -114,7 +119,16 @@ function KanbanCard({ t, onOpen }: { t: TaskView; onOpen: (id: string) => void }
       <div className="kanban-card-goal preset-goal">{t.goal}</div>
       <div className="kanban-card-step muted">{currentStepPhrase(t)}</div>
       <div className="kanban-card-footer">
-        <span className="kanban-project">{t.projectName ?? '独立任务'}</span>
+        <span
+          className="kanban-project"
+          title={[
+            t.agentName ? `Agent · ${t.agentName}` : '默认执行器',
+            t.projectName ? `Project · ${t.projectName}` : null
+          ].filter(Boolean).join(' · ')}
+        >
+          {t.agentName ? `Agent · ${t.agentName}` : '默认执行器'}
+          {t.projectName ? ` · ${t.projectName}` : ''}
+        </span>
         <span className="kanban-activity">{modelCalls} 模型 · {toolCalls} 工具</span>
       </div>
     </button>

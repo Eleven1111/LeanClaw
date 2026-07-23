@@ -24,6 +24,10 @@ export async function runSmoke(): Promise<void> {
     await runAgentCrudSmoke()
     return
   }
+  if (process.env.LEANCLAW_SMOKE_AGENT_BINDING) {
+    await runAgentBindingSmoke()
+    return
+  }
   if (process.env.LEANCLAW_SMOKE_SCHEDULE) {
     await runScheduleSmoke()
     return
@@ -203,6 +207,172 @@ async function runAgentCrudSmoke(): Promise<void> {
       `disable=${!disabled.enabled} reenable=${reenabled.enabled} deleteGuards=${pausedScheduleDeleteBlocked && taskDeleteBlocked}`
   )
   out(pass ? '[smoke] PASS（Agent CRUD 与引用保护）' : '[smoke] FAIL（Agent CRUD）')
+  process.exit(pass ? 0 : 1)
+}
+
+async function runAgentBindingSmoke(): Promise<void> {
+  const originalName = 'Snapshot Agent V1'
+  const originalInstructions = 'AGENT_SNAPSHOT_V1：核验来源后再写结论。'
+  const currentName = 'Snapshot Agent V2'
+  const currentInstructions = 'AGENT_SNAPSHOT_V2：先列反例。'
+  const createdAgent = (await handleRpc({
+    method: 'saveAgent',
+    name: originalName,
+    description: '验证 Agent 创建快照',
+    instructions: originalInstructions,
+    defaultRecipeId: 'file-edit-summarize',
+    defaultBudgetUsd: 1.75,
+    maxConcurrentRuns: 1
+  })) as AgentView
+  const createdTask = (await handleRpc({
+    method: 'createTask',
+    goal: '把这个文件整理成一份带引用的摘要，保存为 Markdown。',
+    inputPath: getSamplePath(),
+    agentId: createdAgent.id
+  })) as TaskView
+  await handleRpc({
+    method: 'saveAgent',
+    id: createdAgent.id,
+    name: currentName,
+    description: '验证旧任务不受编辑影响',
+    instructions: currentInstructions,
+    defaultRecipeId: 'content-pack',
+    defaultBudgetUsd: 2.5,
+    maxConcurrentRuns: 1
+  })
+
+  let settle: (status: string) => void = () => undefined
+  const finished = new Promise<string>((resolve) => {
+    settle = resolve
+  })
+  subscribe(({ task }) => {
+    if (task.id !== createdTask.id) return
+    void (async () => {
+      try {
+        if (task.status === 'awaiting_approval') {
+          const approval = task.approvals.find((item) => item.status === 'pending')
+          if (approval) {
+            await handleRpc({
+              method: 'resolveApproval',
+              approvalId: approval.id,
+              decision: 'approved'
+            })
+          }
+        } else if (['delivered', 'verification_failed', 'failed'].includes(task.status)) {
+          settle(task.status)
+        }
+      } catch (error) {
+        out('[smoke-error] ' + (error as Error).message)
+        settle('smoke-error')
+      }
+    })()
+  })
+  await handleRpc({ method: 'startTask', taskId: createdTask.id })
+  const finalStatus = await Promise.race([
+    finished,
+    new Promise<string>((resolve) => setTimeout(() => resolve('timeout'), 60_000))
+  ])
+
+  const originalTask = (await handleRpc({
+    method: 'getTask',
+    taskId: createdTask.id
+  })) as TaskView
+  const originalRow = getDb().prepare(
+    `SELECT agent_name_snapshot as agentName, agent_instructions_snapshot as agentInstructions,
+            recipe_id as recipeId, budget_usd as budgetUsd
+     FROM tasks WHERE id=?`
+  ).get(createdTask.id) as {
+    agentName: string | null
+    agentInstructions: string | null
+    recipeId: string
+    budgetUsd: number | null
+  }
+
+  const schedule = (await handleRpc({
+    method: 'saveSchedule',
+    name: 'Agent 快照计划',
+    goal: '按计划生成摘要',
+    inputPath: getSamplePath(),
+    recipeId: 'file-edit-summarize',
+    agentId: createdAgent.id,
+    cadence: 'daily',
+    timeOfDay: '08:00'
+  })) as { id: string }
+  const disableBlocked = await rpcFails(
+    { method: 'setAgentEnabled', agentId: createdAgent.id, enabled: false },
+    /暂停或改绑/
+  )
+  await handleRpc({ method: 'setScheduleEnabled', scheduleId: schedule.id, enabled: false })
+  await handleRpc({ method: 'setAgentEnabled', agentId: createdAgent.id, enabled: false })
+  const disabledTaskBlocked = await rpcFails(
+    {
+      method: 'createTask',
+      goal: '停用 Agent 不得创建新任务',
+      inputPath: getSamplePath(),
+      agentId: createdAgent.id
+    },
+    /已停用/
+  )
+  const enableScheduleBlocked = await rpcFails(
+    { method: 'setScheduleEnabled', scheduleId: schedule.id, enabled: true },
+    /Agent 已停用/
+  )
+  await handleRpc({ method: 'setAgentEnabled', agentId: createdAgent.id, enabled: true })
+  await handleRpc({ method: 'setScheduleEnabled', scheduleId: schedule.id, enabled: true })
+  const at = new Date()
+  getDb().prepare('UPDATE schedules SET next_run_at=? WHERE id=?')
+    .run(new Date(at.getTime() - 1000).toISOString(), schedule.id)
+  const scheduledHolder: { task?: TaskView } = {}
+  await runDueSchedules(async (due) => {
+    scheduledHolder.task = (await handleRpc({
+      method: 'createTask',
+      goal: due.goal,
+      inputPath: due.inputPath,
+      recipeId: due.recipeId,
+      ...(due.projectId ? { projectId: due.projectId } : {}),
+      ...(due.agentId ? { agentId: due.agentId } : {}),
+      ...(due.budgetUsd ? { budgetUsd: due.budgetUsd } : {})
+    })) as TaskView
+  }, at)
+  const scheduledTask = scheduledHolder.task
+  const scheduledRow = scheduledTask
+    ? getDb().prepare(
+        `SELECT agent_name_snapshot as agentName,
+                agent_instructions_snapshot as agentInstructions
+         FROM tasks WHERE id=?`
+      ).get(scheduledTask.id) as {
+        agentName: string | null
+        agentInstructions: string | null
+      }
+    : null
+  const approvalsPassed =
+    originalTask.approvals.length === 1 &&
+    originalTask.approvals.every((approval) => approval.status === 'approved')
+  const verificationsPassed =
+    originalTask.verifications.length > 0 &&
+    originalTask.verifications.every((verification) => verification.status === 'passed')
+  const pass =
+    finalStatus === 'delivered' &&
+    originalTask.agentId === createdAgent.id &&
+    originalTask.agentName === originalName &&
+    originalRow.agentName === originalName &&
+    originalRow.agentInstructions === originalInstructions &&
+    originalRow.recipeId === 'file-edit-summarize' &&
+    originalRow.budgetUsd === 1.75 &&
+    disableBlocked &&
+    disabledTaskBlocked &&
+    enableScheduleBlocked &&
+    scheduledRow?.agentName === currentName &&
+    scheduledRow.agentInstructions === currentInstructions &&
+    approvalsPassed &&
+    verificationsPassed
+  out(
+    `[agent-binding] status=${finalStatus} snapshot=${originalRow.agentName === originalName} ` +
+      `defaults=${originalRow.recipeId}/${originalRow.budgetUsd} scheduleSnapshot=${scheduledRow?.agentName} ` +
+      `guards=${disableBlocked}/${disabledTaskBlocked}/${enableScheduleBlocked} ` +
+      `approvals=${approvalsPassed} verify=${verificationsPassed}`
+  )
+  out(pass ? '[smoke] PASS（s17 Agent 快照、绑定与安全门）' : '[smoke] FAIL（s17 Agent 绑定）')
   process.exit(pass ? 0 : 1)
 }
 

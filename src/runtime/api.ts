@@ -16,6 +16,7 @@ import { nextOccurrence, validateScheduleInput } from '../shared/schedule'
 import {
   agentDeleteBlocker,
   agentDisableBlocker,
+  resolveAgentTaskDefaults,
   validateAgentInput
 } from '../shared/agent'
 import { parseRefineInstructions, validatePresetInput, validateProjectInput, validateRuleSetInput } from '../shared/verify'
@@ -68,7 +69,14 @@ export async function handleRpc(req: RpcRequest): Promise<unknown> {
     case 'getTask':
       return buildTaskView(req.taskId)
     case 'createTask':
-      return createTask(req.goal, req.inputPath, req.recipeId, req.budgetUsd, req.projectId)
+      return createTask(
+        req.goal,
+        req.inputPath,
+        req.recipeId,
+        req.budgetUsd,
+        req.projectId,
+        req.agentId
+      )
     case 'startTask':
       return startTask(req.taskId)
     case 'pauseTask':
@@ -626,9 +634,15 @@ function saveCustomRecipe(req: Extract<RpcRequest, { method: 'saveCustomRecipe' 
 }
 
 function deleteCustomRecipe(customRecipeId: string): void {
-  const used = getDb().prepare('SELECT COUNT(*) as count FROM tasks WHERE recipe_id = ?').get(`custom:${customRecipeId}`) as { count: number }
-  const scheduled = getDb().prepare('SELECT COUNT(*) as count FROM schedules WHERE recipe_id = ?').get(`custom:${customRecipeId}`) as { count: number }
-  if (used.count > 0 || scheduled.count > 0) throw new Error('Recipe 已有任务或定时计划，不能删除')
+  const recipeId = `custom:${customRecipeId}`
+  const used = getDb().prepare('SELECT COUNT(*) as count FROM tasks WHERE recipe_id = ?').get(recipeId) as { count: number }
+  const scheduled = getDb().prepare('SELECT COUNT(*) as count FROM schedules WHERE recipe_id = ?').get(recipeId) as { count: number }
+  const agentDefaults = getDb().prepare(
+    'SELECT COUNT(*) as count FROM agents WHERE default_recipe_id = ?'
+  ).get(recipeId) as { count: number }
+  if (used.count > 0 || scheduled.count > 0 || agentDefaults.count > 0) {
+    throw new Error('Recipe 已被任务、定时计划或 Agent 默认配置引用，不能删除')
+  }
   const result = getDb().prepare('DELETE FROM custom_recipes WHERE id = ?').run(customRecipeId)
   if (result.changes !== 1) throw new Error('自定义 Recipe 不存在')
   unregisterRecipe(`custom:${customRecipeId}`)
@@ -636,10 +650,13 @@ function deleteCustomRecipe(customRecipeId: string): void {
 
 function listSchedules(): ScheduleView[] {
   const rows = getDb().prepare(
-    `SELECT id,name,goal,input_path as inputPath,recipe_id as recipeId,project_id as projectId,
-            budget_usd as budgetUsd,cadence,time_of_day as timeOfDay,day_of_week as dayOfWeek,
-            next_run_at as nextRunAt,last_triggered_at as lastTriggeredAt,enabled
-     FROM schedules ORDER BY created_at DESC`
+    `SELECT s.id,s.name,s.goal,s.input_path as inputPath,s.recipe_id as recipeId,
+            s.project_id as projectId,s.agent_id as agentId,a.name as agentName,
+            s.budget_usd as budgetUsd,s.cadence,s.time_of_day as timeOfDay,
+            s.day_of_week as dayOfWeek,s.next_run_at as nextRunAt,
+            s.last_triggered_at as lastTriggeredAt,s.enabled
+     FROM schedules s LEFT JOIN agents a ON a.id = s.agent_id
+     ORDER BY s.created_at DESC`
   ).all() as (Omit<ScheduleView, 'recipeTitle' | 'enabled'> & { enabled: number })[]
   return rows.map((row) => ({ ...row, enabled: Boolean(row.enabled), recipeTitle: getRecipe(row.recipeId).title }))
 }
@@ -654,33 +671,54 @@ function saveSchedule(req: Extract<RpcRequest, { method: 'saveSchedule' }>): Sch
   const recipe = getRecipe(req.recipeId)
   if (recipe.requiredInputs.includes('inputPath') && !req.inputPath.trim()) throw new Error('该 Recipe 必须指定输入文件')
   if (req.projectId && !getDb().prepare('SELECT id FROM projects WHERE id=?').get(req.projectId)) throw new Error('项目不存在')
+  const agent = req.agentId
+    ? getDb().prepare('SELECT id, enabled FROM agents WHERE id=?').get(req.agentId) as
+        | { id: string; enabled: number }
+        | undefined
+    : undefined
+  if (req.agentId && !agent) throw new Error('Agent 不存在')
+  if (agent && !agent.enabled) throw new Error('已停用的 Agent 不能绑定新的定时计划')
   if (req.budgetUsd !== undefined && !(req.budgetUsd > 0)) throw new Error('预算必须为正数')
   const id = req.scheduleId ?? uid()
   const timestamp = now()
   const next = nextOccurrence(schedule.value.cadence, schedule.value.timeOfDay, new Date(), schedule.value.dayOfWeek)
-  const values = [name, goal, req.inputPath.trim(), req.recipeId, req.projectId ?? null, req.budgetUsd ?? null,
+  const values = [name, goal, req.inputPath.trim(), req.recipeId, req.projectId ?? null,
+    req.agentId ?? null, req.budgetUsd ?? null,
     schedule.value.cadence, schedule.value.timeOfDay, schedule.value.dayOfWeek, next.toISOString(), timestamp]
   if (req.scheduleId) {
     const result = getDb().prepare(
-      `UPDATE schedules SET name=?,goal=?,input_path=?,recipe_id=?,project_id=?,budget_usd=?,cadence=?,
+      `UPDATE schedules SET name=?,goal=?,input_path=?,recipe_id=?,project_id=?,agent_id=?,budget_usd=?,cadence=?,
        time_of_day=?,day_of_week=?,next_run_at=?,updated_at=? WHERE id=?`
     ).run(...values, id)
     if (result.changes !== 1) throw new Error('定时计划不存在')
   } else {
     getDb().prepare(
       `INSERT INTO schedules
-       (id,name,goal,input_path,recipe_id,project_id,budget_usd,cadence,time_of_day,day_of_week,next_run_at,enabled,created_at,updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,1,?,?)`
-    ).run(id, ...values.slice(0, 10), timestamp, timestamp)
+       (id,name,goal,input_path,recipe_id,project_id,agent_id,budget_usd,cadence,time_of_day,day_of_week,next_run_at,enabled,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1,?,?)`
+    ).run(id, ...values.slice(0, 11), timestamp, timestamp)
   }
   return listSchedules().find((item) => item.id === id) as ScheduleView
 }
 
 function setScheduleEnabled(scheduleId: string, enabled: boolean): ScheduleView {
-  const row = getDb().prepare('SELECT cadence,time_of_day,day_of_week FROM schedules WHERE id=?').get(scheduleId) as
-    | { cadence: 'daily' | 'weekdays' | 'weekly'; time_of_day: string; day_of_week: number | null }
+  const row = getDb().prepare(
+    `SELECT s.cadence,s.time_of_day,s.day_of_week,s.agent_id,
+            a.enabled as agent_enabled
+     FROM schedules s LEFT JOIN agents a ON a.id = s.agent_id WHERE s.id=?`
+  ).get(scheduleId) as
+    | {
+        cadence: 'daily' | 'weekdays' | 'weekly'
+        time_of_day: string
+        day_of_week: number | null
+        agent_id: string | null
+        agent_enabled: number | null
+      }
     | undefined
   if (!row) throw new Error('定时计划不存在')
+  if (enabled && row.agent_id && !row.agent_enabled) {
+    throw new Error('该定时计划绑定的 Agent 已停用，请先重新启用 Agent 或改绑计划')
+  }
   const next = nextOccurrence(row.cadence, row.time_of_day, new Date(), row.day_of_week)
   getDb().prepare('UPDATE schedules SET enabled=?,next_run_at=?,updated_at=? WHERE id=?')
     .run(enabled ? 1 : 0, next.toISOString(), now(), scheduleId)
@@ -697,19 +735,45 @@ function createTask(
   inputPath: string,
   recipeId?: string,
   budgetUsd?: number,
-  projectId?: string
+  projectId?: string,
+  agentId?: string
 ): TaskView {
   if (!goal.trim()) throw new Error('任务目标不能为空')
-  const rid = recipeId ?? fileEditRecipe.id
+  const agent = agentId
+    ? getDb().prepare(
+        `SELECT id,name,instructions,default_recipe_id as defaultRecipeId,
+                default_budget_usd as defaultBudgetUsd,enabled
+         FROM agents WHERE id=?`
+      ).get(agentId) as
+        | {
+            id: string
+            name: string
+            instructions: string
+            defaultRecipeId: string | null
+            defaultBudgetUsd: number | null
+            enabled: number
+          }
+        | undefined
+    : undefined
+  if (agentId && !agent) throw new Error('Agent 不存在')
+  if (agent && !agent.enabled) throw new Error('已停用的 Agent 不能创建新任务')
+  const resolved = resolveAgentTaskDefaults(
+    { recipeId, budgetUsd },
+    agent ?? null,
+    {
+      fallbackRecipeId: fileEditRecipe.id,
+      defaultBudgetUsd: getRuntimeConfig().defaultBudgetUsd
+    }
+  )
+  const rid = resolved.recipeId
   const recipe = getRecipe(rid)
   if (recipe.requiredInputs.includes('inputPath') && !inputPath.trim()) {
     throw new Error('必须指定输入文件路径')
   }
-  if (budgetUsd !== undefined && !(budgetUsd > 0)) {
+  if (resolved.budgetUsd !== null && !(resolved.budgetUsd > 0)) {
     throw new Error('预算必须为正数')
   }
-  const defaultBudget = getRuntimeConfig().defaultBudgetUsd
-  const effectiveBudget = budgetUsd !== undefined ? budgetUsd : defaultBudget > 0 ? defaultBudget : null
+  const effectiveBudget = resolved.budgetUsd
   const id = uid()
   const project = projectId
     ? getDb().prepare('SELECT id, saved_instructions FROM projects WHERE id = ?').get(projectId) as
@@ -720,13 +784,17 @@ function createTask(
   getDb()
     .prepare(
       `INSERT INTO tasks
-       (id, project_id, project_instructions_snapshot, goal, input_path, recipe_id, status, budget_usd, created_at, updated_at)
-       VALUES (?,?,?,?,?,?, 'draft', ?, ?, ?)`
+       (id, project_id, project_instructions_snapshot, agent_id, agent_name_snapshot,
+        agent_instructions_snapshot, goal, input_path, recipe_id, status, budget_usd, created_at, updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?, 'draft', ?, ?, ?)`
     )
     .run(
       id,
       project?.id ?? null,
       project?.saved_instructions ?? null,
+      agent?.id ?? null,
+      agent?.name ?? null,
+      agent?.instructions ?? null,
       goal.trim(),
       inputPath.trim(),
       rid,
@@ -740,7 +808,10 @@ function createTask(
     recipeId: rid,
     budgetUsd: effectiveBudget,
     projectId: project?.id ?? null,
-    hasProjectInstructions: Boolean(project?.saved_instructions)
+    hasProjectInstructions: Boolean(project?.saved_instructions),
+    agentId: agent?.id ?? null,
+    agentName: agent?.name ?? null,
+    hasAgentInstructions: Boolean(agent?.instructions)
   })
   return buildTaskView(id)
 }
@@ -752,6 +823,8 @@ function startTask(taskId: string): TaskView {
     recipe_id: string
     project_id: string | null
     project_instructions_snapshot: string | null
+    agent_name_snapshot: string | null
+    agent_instructions_snapshot: string | null
   }
   transition(taskId, 'planning')
   const recipe = getRecipe(task.recipe_id)
@@ -761,17 +834,22 @@ function startTask(taskId: string): TaskView {
   const projectLine = projectName
     ? `Project：${projectName}${task.project_instructions_snapshot ? '（Saved Instructions 已按创建时快照注入）' : ''}`
     : null
+  const agentLine = task.agent_name_snapshot
+    ? `Agent：${task.agent_name_snapshot}${task.agent_instructions_snapshot ? '（稳定指令已按创建时快照注入）' : ''}`
+    : null
   const brief =
     recipe.id === 'deep-research'
       ? [
           `目标：${task.goal}`,
           projectLine,
+          agentLine,
           '交付契约：一份带引用的 Markdown 研究报告，至少 2 节内容、至少 2 条逐字引用；写入前需人工批准 Diff。',
           `Recipe：${recipe.title}（${recipe.steps.length} 步）`
         ].filter(Boolean).join('\n')
       : [
           `目标：${task.goal}`,
           projectLine,
+          agentLine,
           `输入：${task.input_path}`,
           '交付契约：一份 Markdown 摘要文件，含标题、摘要和至少 2 条逐字引用；写入前需人工批准 Diff。',
           `Recipe：${recipe.title}（${recipe.steps.length} 步）`

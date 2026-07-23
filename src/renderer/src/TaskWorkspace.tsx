@@ -237,6 +237,11 @@ export function TaskWorkspace({
           <div className="head-meta">
             <StatusChip s={task.userStatus} />
             {task.status === 'paused_by_user' && <span className="chip chip-gray">已暂停</span>}
+            {task.agentName && (
+              <span className="chip chip-agent" title={`Agent · ${task.agentName}`}>
+                Agent · {task.agentName}
+              </span>
+            )}
             {task.queuePosition !== null && (
               <span className="queue-badge">排队中 · 第 {task.queuePosition} 位</span>
             )}

@@ -68,6 +68,7 @@ startScheduleLoop(async (schedule) => {
   const task = await handleRpc({
     method: 'createTask', goal: schedule.goal, inputPath: schedule.inputPath, recipeId: schedule.recipeId,
     ...(schedule.projectId ? { projectId: schedule.projectId } : {}),
+    ...(schedule.agentId ? { agentId: schedule.agentId } : {}),
     ...(schedule.budgetUsd ? { budgetUsd: schedule.budgetUsd } : {})
   }) as TaskView
   getDb().prepare('UPDATE tasks SET schedule_id=? WHERE id=?').run(schedule.id, task.id)

@@ -13,6 +13,20 @@ export type AgentValidation =
   | { ok: true; value: NormalizedAgentInput }
   | { ok: false; detail: string }
 
+export function resolveAgentTaskDefaults(
+  explicit: { recipeId?: string; budgetUsd?: number },
+  agent: { defaultRecipeId: string | null; defaultBudgetUsd: number | null } | null,
+  fallback: { fallbackRecipeId: string; defaultBudgetUsd: number }
+): { recipeId: string; budgetUsd: number | null } {
+  return {
+    recipeId: explicit.recipeId ?? agent?.defaultRecipeId ?? fallback.fallbackRecipeId,
+    budgetUsd:
+      explicit.budgetUsd ??
+      agent?.defaultBudgetUsd ??
+      (fallback.defaultBudgetUsd > 0 ? fallback.defaultBudgetUsd : null)
+  }
+}
+
 export function validateAgentInput(input: AgentUpsertInput): AgentValidation {
   const name = input.name.trim()
   if (!name || name.length > 40) {

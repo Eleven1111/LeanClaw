@@ -203,6 +203,8 @@ export interface TaskView {
   recipeId: string
   projectId: string | null
   projectName: string | null
+  agentId: string | null
+  agentName: string | null
   budgetUsd: number | null
   refineInstructions: string[]
   queuePosition: number | null
@@ -285,6 +287,8 @@ export interface ScheduleView {
   recipeId: string
   recipeTitle: string
   projectId: string | null
+  agentId: string | null
+  agentName: string | null
   budgetUsd: number | null
   cadence: 'daily' | 'weekdays' | 'weekly'
   timeOfDay: string
@@ -424,7 +428,7 @@ export interface RunDetailView {
 export type RpcRequest =
   | { method: 'listTasks' }
   | { method: 'getTask'; taskId: string }
-  | { method: 'createTask'; goal: string; inputPath: string; recipeId?: string; budgetUsd?: number; projectId?: string }
+  | { method: 'createTask'; goal: string; inputPath: string; recipeId?: string; budgetUsd?: number; projectId?: string; agentId?: string }
   | { method: 'startTask'; taskId: string }
   | { method: 'pauseTask'; taskId: string }
   | { method: 'resumeTask'; taskId: string }
@@ -463,7 +467,7 @@ export type RpcRequest =
   | { method: 'saveCustomRecipe'; customRecipeId?: string; name: string; goal: string; stepIds: string[]; ruleSetId: string }
   | { method: 'deleteCustomRecipe'; customRecipeId: string }
   | { method: 'listSchedules' }
-  | { method: 'saveSchedule'; scheduleId?: string; name: string; goal: string; inputPath: string; recipeId: string; projectId?: string; budgetUsd?: number; cadence: 'daily' | 'weekdays' | 'weekly'; timeOfDay: string; dayOfWeek?: number }
+  | { method: 'saveSchedule'; scheduleId?: string; name: string; goal: string; inputPath: string; recipeId: string; projectId?: string; agentId?: string; budgetUsd?: number; cadence: 'daily' | 'weekdays' | 'weekly'; timeOfDay: string; dayOfWeek?: number }
   | { method: 'setScheduleEnabled'; scheduleId: string; enabled: boolean }
   | { method: 'deleteSchedule'; scheduleId: string }
 

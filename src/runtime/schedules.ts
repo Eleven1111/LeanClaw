@@ -7,12 +7,14 @@ export interface DueSchedule {
   inputPath: string
   recipeId: string
   projectId: string | null
+  agentId: string | null
   budgetUsd: number | null
 }
 
 type ScheduleRow = {
   id: string; goal: string; input_path: string; recipe_id: string; project_id: string | null;
-  budget_usd: number | null; cadence: ScheduleCadence; time_of_day: string; day_of_week: number | null
+  agent_id: string | null; budget_usd: number | null; cadence: ScheduleCadence;
+  time_of_day: string; day_of_week: number | null
 }
 
 export async function runDueSchedules(
@@ -25,16 +27,30 @@ export async function runDueSchedules(
   ).all(at.toISOString()) as ScheduleRow[]
   for (const row of rows) {
     const claimed = db.transaction(() => {
-      const current = db.prepare('SELECT enabled, next_run_at FROM schedules WHERE id = ?').get(row.id) as { enabled: number; next_run_at: string } | undefined
-      if (!current?.enabled || current.next_run_at > at.toISOString()) return false
-      const next = nextOccurrence(row.cadence, row.time_of_day, at, row.day_of_week)
+      const current = db.prepare('SELECT * FROM schedules WHERE id = ?').get(row.id) as
+        | (ScheduleRow & { enabled: number; next_run_at: string })
+        | undefined
+      if (!current?.enabled || current.next_run_at > at.toISOString()) return null
+      const next = nextOccurrence(
+        current.cadence,
+        current.time_of_day,
+        at,
+        current.day_of_week
+      )
       db.prepare('UPDATE schedules SET next_run_at=?, last_triggered_at=?, updated_at=? WHERE id=?')
         .run(next.toISOString(), at.toISOString(), now(), row.id)
-      return true
+      return current
     })()
     if (!claimed) continue
-    await trigger({ id: row.id, goal: row.goal, inputPath: row.input_path, recipeId: row.recipe_id,
-      projectId: row.project_id, budgetUsd: row.budget_usd })
+    await trigger({
+      id: claimed.id,
+      goal: claimed.goal,
+      inputPath: claimed.input_path,
+      recipeId: claimed.recipe_id,
+      projectId: claimed.project_id,
+      agentId: claimed.agent_id,
+      budgetUsd: claimed.budget_usd
+    })
   }
   return rows.length
 }

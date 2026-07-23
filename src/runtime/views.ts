@@ -16,6 +16,8 @@ export function buildTaskView(taskId: string): TaskView {
         input_path: string
         recipe_id: string
         project_id: string | null
+        agent_id: string | null
+        agent_name_snapshot: string | null
         status: InternalStatus
         budget_usd: number | null
         refine_instructions: string | null
@@ -105,6 +107,8 @@ export function buildTaskView(taskId: string): TaskView {
     recipeId: t.recipe_id,
     projectId: t.project_id ?? null,
     projectName: project?.name ?? null,
+    agentId: t.agent_id ?? null,
+    agentName: t.agent_name_snapshot ?? null,
     budgetUsd: t.budget_usd ?? null,
     refineInstructions: parseRefineInstructions(t.refine_instructions),
     queuePosition: getQueuePosition(t.id),

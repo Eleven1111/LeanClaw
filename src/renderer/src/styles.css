@@ -624,6 +624,17 @@ button.ghost {
   white-space: nowrap;
 }
 
+.task-agent {
+  color: var(--purple);
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .chip {
   font-size: 11px;
   font-weight: 600;
@@ -680,6 +691,13 @@ button.ghost {
 .chip-green { background: var(--green); }
 .chip-red { background: var(--red); }
 .chip-gray { background: var(--gray); }
+.chip-agent {
+  background: var(--purple);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .workspace header {
   display: flex;
@@ -1184,8 +1202,28 @@ button.link {
 .schedule-form { display: grid; gap: 10px; margin-bottom: 12px; }
 .schedule-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .schedule-list { display: grid; gap: 8px; }
-.schedule-card { align-items: center; display: flex; justify-content: space-between; }
+.schedule-card {
+  align-items: center;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  justify-content: space-between;
+}
 .schedule-card p { margin: 4px 0; }
+.schedule-rebind {
+  align-items: center;
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 10px;
+  grid-column: 1 / -1;
+  grid-template-columns: auto minmax(180px, 1fr) auto;
+  margin-top: 12px;
+  padding-top: 12px;
+}
+.schedule-rebind label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
 
 .budget-input {
   width: auto;

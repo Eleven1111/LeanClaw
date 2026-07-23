@@ -36,10 +36,10 @@ export function buildSummaryPrompt(source: string, goal: string, refine: string[
     '{"title": "摘要标题", "summary": "200 字以内的中文摘要", "quotes": ["原文中逐字存在的引用 1", "原文中逐字存在的引用 2"]}',
     'quotes 必须是源文件中逐字连续出现的句子片段，禁止任何改写。',
     `用户目标：${goal}`,
+    buildRefineSection(refine),
     SRC_BEGIN,
     source,
-    SRC_END,
-    buildRefineSection(refine)
+    SRC_END
   ]
     .filter((s) => s !== '')
     .join('\n')
@@ -63,8 +63,8 @@ export function buildResearchPrompt(
       '"citations": [{"quote": "逐字引用", "url": "来源 URL"}]（至少 2 条）}',
     'citations 的 quote 必须是对应 url 来源正文中逐字连续出现的句子片段，禁止改写或编造。',
     `研究目标：${goal}`,
-    blocks,
-    buildRefineSection(refine)
+    buildRefineSection(refine),
+    blocks
   ]
     .filter((s) => s !== '')
     .join('\n\n')
@@ -98,13 +98,13 @@ export function buildDraftPrompt(
     '你是一个专业内容创作者。基于下面的素材和已确认的大纲，撰写一篇适合发布的中文文章正文。',
     '直接输出 Markdown 正文（不要输出 JSON、不要代码块包裹），要求：以 "# " 开头的一级标题、按大纲顺序组织为若干小节、全文不少于 600 字。',
     `用户目标（含平台要求）：${goal}`,
+    buildRefineSection(refine),
     DRAFT_OUTLINE_BEGIN,
     JSON.stringify(outline),
     DRAFT_OUTLINE_END,
     DRAFT_SRC_BEGIN,
     source,
-    DRAFT_SRC_END,
-    buildRefineSection(refine)
+    DRAFT_SRC_END
   ]
     .filter((s) => s !== '')
     .join('\n')
