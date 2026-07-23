@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  agentColorIndex,
   agentDeleteBlocker,
   agentDisableBlocker,
   validateAgentInput
@@ -95,5 +96,13 @@ describe('Agent 引用保护', () => {
   it('只有启用中的 Schedule 引用才阻止停用', () => {
     expect(agentDisableBlocker(1)).toMatch(/暂停或改绑/)
     expect(agentDisableBlocker(0)).toBeNull()
+  })
+})
+
+describe('Agent 视觉标识', () => {
+  it('颜色只由稳定 ID 决定并落在固定色板范围', () => {
+    expect(agentColorIndex('agent-stable-id', 6)).toBe(agentColorIndex('agent-stable-id', 6))
+    expect(agentColorIndex('agent-stable-id', 6)).toBeGreaterThanOrEqual(0)
+    expect(agentColorIndex('agent-stable-id', 6)).toBeLessThan(6)
   })
 })

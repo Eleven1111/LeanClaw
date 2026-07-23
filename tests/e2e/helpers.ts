@@ -9,8 +9,11 @@ export interface LaunchedApp {
   dataDir: string
 }
 
-export async function launchApp(env: Record<string, string> = {}): Promise<LaunchedApp> {
-  const dataDir = mkdtempSync(join(tmpdir(), 'leanclaw-e2e-'))
+export async function launchApp(
+  env: Record<string, string> = {},
+  existingDataDir?: string
+): Promise<LaunchedApp> {
+  const dataDir = existingDataDir ?? mkdtempSync(join(tmpdir(), 'leanclaw-e2e-'))
   const app = await electron.launch({
     args: [join(process.cwd(), 'out/main/index.js')],
     env: {

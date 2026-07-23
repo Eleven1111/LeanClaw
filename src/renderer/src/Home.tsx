@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { ProjectView, RecipeView, TaskView } from '../../shared/types'
+import type { AgentView, ProjectView, RecipeView, TaskView } from '../../shared/types'
 import { StatusChip } from './TaskWorkspace'
 import { Schedules } from './Schedules'
 import { actionPhrase } from '../../shared/progress'
@@ -22,9 +22,11 @@ function TaskRow({ t, onOpen }: { t: TaskView; onOpen: (id: string) => void }): 
 }
 
 interface InitialPreset {
-  recipeId: string
+  recipeId?: string
   goal?: string
   inputPath?: string
+  budgetUsd?: number
+  agentId?: string
 }
 
 export function Home({
@@ -40,7 +42,9 @@ export function Home({
 }): React.JSX.Element {
   const [goal, setGoal] = useState(initialPreset?.goal ?? '')
   const [inputPath, setInputPath] = useState(initialPreset?.inputPath ?? '')
-  const [budgetDraft, setBudgetDraft] = useState('')
+  const [budgetDraft, setBudgetDraft] = useState(
+    initialPreset?.budgetUsd === undefined ? '' : String(initialPreset.budgetUsd)
+  )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [recipes, setRecipes] = useState<RecipeView[]>([])
@@ -48,6 +52,8 @@ export function Home({
   const [sampleGoal, setSampleGoal] = useState('')
   const [projects, setProjects] = useState<ProjectView[]>([])
   const [projectId, setProjectId] = useState('')
+  const [agents, setAgents] = useState<AgentView[]>([])
+  const [agentId, setAgentId] = useState(initialPreset?.agentId ?? '')
 
   useEffect(() => {
     void window.api.rpc({ method: 'getDefaults' }).then((d) => {
@@ -58,13 +64,16 @@ export function Home({
     })
     void window.api.rpc({ method: 'listRecipes' }).then((r) => setRecipes(r as RecipeView[]))
     void window.api.rpc({ method: 'listProjects' }).then((r) => setProjects(r as ProjectView[]))
+    void window.api.rpc({ method: 'listAgents' }).then((r) => setAgents(r as AgentView[]))
   }, [])
 
   useEffect(() => {
     if (!initialPreset) return
-    setRecipeId(initialPreset.recipeId)
+    if (initialPreset.recipeId) setRecipeId(initialPreset.recipeId)
     if (initialPreset.goal !== undefined) setGoal(initialPreset.goal)
     if (initialPreset.inputPath !== undefined) setInputPath(initialPreset.inputPath)
+    if (initialPreset.budgetUsd !== undefined) setBudgetDraft(String(initialPreset.budgetUsd))
+    if (initialPreset.agentId !== undefined) setAgentId(initialPreset.agentId)
   }, [initialPreset])
 
   const selectedRecipe = recipes.find((r) => r.id === recipeId)
@@ -80,6 +89,14 @@ export function Home({
     } else {
       setGoal((g) => (!g.trim() || g === RESEARCH_GOAL ? sampleGoal : g))
     }
+  }
+
+  const changeAgent = (id: string): void => {
+    setAgentId(id)
+    const agent = agents.find((candidate) => candidate.id === id)
+    if (!agent) return
+    if (agent.defaultRecipeId) changeRecipe(agent.defaultRecipeId)
+    if (agent.defaultBudgetUsd !== null) setBudgetDraft(String(agent.defaultBudgetUsd))
   }
 
   const start = async (): Promise<void> => {
@@ -145,8 +162,16 @@ export function Home({
           rows={3}
           placeholder={requiresInput ? '用一句话交代一个完整任务…' : '用一句话交代一个研究任务…'}
         />
+        <div className="agent-row">
+          <select aria-label="Agent" value={agentId} onChange={(e) => changeAgent(e.target.value)}>
+            <option value="">默认执行器</option>
+            {agents
+              .filter((agent) => agent.enabled || agent.id === agentId)
+              .map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}
+          </select>
+        </div>
         <div className="recipe-row">
-          <select value={recipeId} onChange={(e) => changeRecipe(e.target.value)}>
+          <select aria-label="Recipe" value={recipeId} onChange={(e) => changeRecipe(e.target.value)}>
             {recipes.map((r) => (
               <option key={r.id} value={r.id}>
                 {r.title}
@@ -173,6 +198,7 @@ export function Home({
             min={0}
             step="0.01"
             className="budget-input"
+            aria-label="预算 USD（可选）"
             value={budgetDraft}
             onChange={(e) => setBudgetDraft(e.target.value)}
             placeholder="预算 USD（可选）"

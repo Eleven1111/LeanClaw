@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { PresetView, TaskView } from '../../shared/types'
+import type { AgentView, PresetView, TaskView } from '../../shared/types'
 import { Home } from './Home'
 import { Settings } from './Settings'
 import { TaskWorkspace } from './TaskWorkspace'
@@ -8,16 +8,28 @@ import { Library } from './Library'
 import { RunInspector } from './RunInspector'
 import { Tasks } from './Tasks'
 import { Projects } from './Projects'
+import { Agents } from './Agents'
 import type { TaskFilter } from './Tasks'
 import { CommandPalette, type PaletteCommand } from './CommandPalette'
 import appIconUrl from '../../../resources/icon.png'
 
-type ViewId = 'home' | 'task' | 'tasks' | 'projects' | 'deliverables' | 'library' | 'settings' | 'inspector'
+type ViewId =
+  | 'home'
+  | 'task'
+  | 'tasks'
+  | 'projects'
+  | 'agents'
+  | 'deliverables'
+  | 'library'
+  | 'settings'
+  | 'inspector'
 
 interface InitialPreset {
-  recipeId: string
+  recipeId?: string
   goal?: string
   inputPath?: string
+  budgetUsd?: number
+  agentId?: string
 }
 
 type NavGroup = 'workspace' | 'assets' | 'system'
@@ -26,6 +38,7 @@ const NAV_ITEMS: { id: ViewId; label: string; title: string; group: NavGroup }[]
   { id: 'home', label: 'Home', title: '发起任务', group: 'workspace' },
   { id: 'tasks', label: 'Tasks', title: '任务', group: 'workspace' },
   { id: 'projects', label: 'Projects', title: '项目', group: 'workspace' },
+  { id: 'agents', label: 'Agent', title: 'Agent', group: 'workspace' },
   { id: 'deliverables', label: 'Deliverables', title: '交付物', group: 'assets' },
   { id: 'library', label: 'Library', title: '能力库', group: 'assets' },
   { id: 'settings', label: 'Settings', title: '设置', group: 'system' }
@@ -42,6 +55,7 @@ const PAGE_TITLES: Record<ViewId, string> = {
   task: '任务详情',
   tasks: '任务',
   projects: '项目',
+  agents: 'Agent',
   deliverables: '交付物',
   library: '能力库',
   settings: '设置',
@@ -103,6 +117,16 @@ export function App(): React.JSX.Element {
   const usePresetAsTask = (preset: PresetView): void => {
     setSelectedTaskId(null)
     setInitialPreset({ recipeId: preset.recipeId, goal: preset.goal, inputPath: preset.inputPath })
+    setView('home')
+  }
+
+  const useAgentAsTask = (agent: AgentView): void => {
+    setSelectedTaskId(null)
+    setInitialPreset({
+      agentId: agent.id,
+      ...(agent.defaultRecipeId ? { recipeId: agent.defaultRecipeId } : {}),
+      ...(agent.defaultBudgetUsd !== null ? { budgetUsd: agent.defaultBudgetUsd } : {})
+    })
     setView('home')
   }
 
@@ -182,6 +206,8 @@ export function App(): React.JSX.Element {
     content = <Tasks tasks={list} initialFilter={initialTasksFilter} onOpenTask={openTask} />
   } else if (view === 'projects') {
     content = <Projects tasks={list} onOpenTask={openTask} />
+  } else if (view === 'agents') {
+    content = <Agents onUseAgent={useAgentAsTask} />
   } else if (view === 'deliverables') {
     content = <Deliverables onOpenTask={openTask} />
   } else if (view === 'library') {

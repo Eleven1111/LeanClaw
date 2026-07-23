@@ -66,3 +66,15 @@ export function agentDisableBlocker(enabledScheduleCount: number): string | null
     ? 'Agent 仍被启用中的定时计划引用，请先暂停或改绑这些自动化'
     : null
 }
+
+export function agentColorIndex(id: string, paletteSize: number): number {
+  if (!Number.isInteger(paletteSize) || paletteSize < 1) {
+    throw new Error('Agent 色板不能为空')
+  }
+  let hash = 2166136261
+  for (let index = 0; index < id.length; index++) {
+    hash ^= id.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return (hash >>> 0) % paletteSize
+}

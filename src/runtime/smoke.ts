@@ -138,6 +138,9 @@ async function runAgentCrudSmoke(): Promise<void> {
     timeOfDay: '08:00'
   })) as { id: string }
   getDb().prepare('UPDATE schedules SET agent_id=? WHERE id=?').run(created.id, schedule.id)
+  const scheduleLinked = ((await handleRpc({ method: 'listAgents' })) as AgentView[]).find(
+    (agent) => agent.id === created.id
+  )
   const activeScheduleBlocked = await rpcFails(
     { method: 'setAgentEnabled', agentId: created.id, enabled: false },
     /暂停或改绑/
@@ -166,6 +169,9 @@ async function runAgentCrudSmoke(): Promise<void> {
     recipeId: 'deep-research'
   })) as TaskView
   getDb().prepare('UPDATE tasks SET agent_id=? WHERE id=?').run(created.id, task.id)
+  const taskLinked = ((await handleRpc({ method: 'listAgents' })) as AgentView[]).find(
+    (agent) => agent.id === created.id
+  )
   const taskDeleteBlocked = await rpcFails(
     { method: 'deleteAgent', agentId: created.id },
     /任务/
@@ -181,15 +187,19 @@ async function runAgentCrudSmoke(): Promise<void> {
     duplicateBlocked &&
     recipeBlocked &&
     activeScheduleBlocked &&
+    scheduleLinked?.scheduleCount === 1 &&
+    scheduleLinked.enabledScheduleCount === 1 &&
     !disabled.enabled &&
     reenabled.enabled &&
     pausedScheduleDeleteBlocked &&
     task.status === 'draft' &&
+    taskLinked?.taskCount === 1 &&
     taskDeleteBlocked &&
     !remaining.some((agent) => agent.id === created.id)
   out(
     `[agent-crud] trim=${created.name === 'Research Agent'} update=${updated.updatedAt !== created.updatedAt} ` +
       `duplicate=${duplicateBlocked} recipe=${recipeBlocked} activeSchedule=${activeScheduleBlocked} ` +
+      `counts=${scheduleLinked?.scheduleCount}/${taskLinked?.taskCount} ` +
       `disable=${!disabled.enabled} reenable=${reenabled.enabled} deleteGuards=${pausedScheduleDeleteBlocked && taskDeleteBlocked}`
   )
   out(pass ? '[smoke] PASS（Agent CRUD 与引用保护）' : '[smoke] FAIL（Agent CRUD）')

@@ -385,7 +385,12 @@ function listAgents(): AgentView[] {
       `SELECT id, name, description, instructions, default_recipe_id as defaultRecipeId,
               default_budget_usd as defaultBudgetUsd,
               max_concurrent_runs as maxConcurrentRuns, enabled,
-              created_at as createdAt, updated_at as updatedAt
+              created_at as createdAt, updated_at as updatedAt,
+              (SELECT COUNT(*) FROM tasks WHERE agent_id = agents.id) as taskCount,
+              (SELECT COUNT(*) FROM schedules WHERE agent_id = agents.id) as scheduleCount,
+              (SELECT COUNT(*) FROM schedules
+               WHERE agent_id = agents.id AND schedules.enabled = 1)
+                as enabledScheduleCount
        FROM agents ORDER BY updated_at DESC, name ASC`
     )
     .all() as (Omit<AgentView, 'enabled'> & { enabled: number })[]

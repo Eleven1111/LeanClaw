@@ -226,6 +226,9 @@ export interface AgentView {
   defaultBudgetUsd: number | null
   maxConcurrentRuns: number
   enabled: boolean
+  taskCount: number
+  scheduleCount: number
+  enabledScheduleCount: number
   createdAt: string
   updatedAt: string
 }
