@@ -217,6 +217,29 @@ export interface TaskView {
   updatedAt: string
 }
 
+export interface AgentView {
+  id: string
+  name: string
+  description: string
+  instructions: string
+  defaultRecipeId: string | null
+  defaultBudgetUsd: number | null
+  maxConcurrentRuns: number
+  enabled: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AgentUpsertInput {
+  id?: string
+  name: string
+  description: string
+  instructions: string
+  defaultRecipeId?: string | null
+  defaultBudgetUsd?: number | null
+  maxConcurrentRuns: number
+}
+
 export interface ProjectView {
   id: string
   name: string
@@ -423,6 +446,10 @@ export type RpcRequest =
   | { method: 'archiveAllDelivered' }
   | { method: 'testProvider'; providerId: string }
   | { method: 'mcpStatus' }
+  | { method: 'listAgents' }
+  | ({ method: 'saveAgent' } & AgentUpsertInput)
+  | { method: 'setAgentEnabled'; agentId: string; enabled: boolean }
+  | { method: 'deleteAgent'; agentId: string }
   | { method: 'listProjects' }
   | { method: 'saveProject'; projectId?: string; name: string; description: string; savedInstructions: string }
   | { method: 'deleteProject'; projectId: string }

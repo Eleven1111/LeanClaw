@@ -8,7 +8,7 @@ import { getMcpStatus, shutdownAllMcp, syncMcpFromConfig } from './mcp'
 import { getTool } from './tools'
 import { riskForShell } from './tools-shell'
 import { mcpToolId } from '../shared/mcp'
-import type { TaskView } from '../shared/types'
+import type { AgentView, RpcRequest, TaskView } from '../shared/types'
 import { runDueSchedules, type DueSchedule } from './schedules'
 
 const out = (s: string): void => {
@@ -16,6 +16,14 @@ const out = (s: string): void => {
 }
 
 export async function runSmoke(): Promise<void> {
+  if (process.env.LEANCLAW_SMOKE_AGENT_MIGRATION) {
+    runAgentMigrationSmoke()
+    return
+  }
+  if (process.env.LEANCLAW_SMOKE_AGENT_CRUD) {
+    await runAgentCrudSmoke()
+    return
+  }
   if (process.env.LEANCLAW_SMOKE_SCHEDULE) {
     await runScheduleSmoke()
     return
@@ -37,6 +45,155 @@ export async function runSmoke(): Promise<void> {
     return
   }
   await runSingleSmoke()
+}
+
+async function rpcFails(req: RpcRequest, expected: RegExp): Promise<boolean> {
+  try {
+    await handleRpc(req)
+    return false
+  } catch (error) {
+    return expected.test((error as Error).message)
+  }
+}
+
+function runAgentMigrationSmoke(): void {
+  const db = getDb()
+  const version = (
+    db.prepare('SELECT version FROM schema_version LIMIT 1').get() as { version: number }
+  ).version
+  const agentTable = Boolean(
+    db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='agents'`).get()
+  )
+  const taskColumns = (
+    db.prepare('PRAGMA table_info(tasks)').all() as { name: string }[]
+  ).map((column) => column.name)
+  const scheduleColumns = (
+    db.prepare('PRAGMA table_info(schedules)').all() as { name: string }[]
+  ).map((column) => column.name)
+  const task = db
+    .prepare(
+      `SELECT agent_id as agentId, agent_name_snapshot as agentName,
+              agent_instructions_snapshot as agentInstructions
+       FROM tasks WHERE id = 'legacy-task'`
+    )
+    .get() as
+    | { agentId: string | null; agentName: string | null; agentInstructions: string | null }
+    | undefined
+  const schedule = db
+    .prepare(`SELECT agent_id as agentId FROM schedules WHERE id = 'legacy-schedule'`)
+    .get() as { agentId: string | null } | undefined
+  const pass =
+    version === 10 &&
+    agentTable &&
+    ['agent_id', 'agent_name_snapshot', 'agent_instructions_snapshot'].every((column) =>
+      taskColumns.includes(column)
+    ) &&
+    scheduleColumns.includes('agent_id') &&
+    task?.agentId === null &&
+    task.agentName === null &&
+    task.agentInstructions === null &&
+    schedule?.agentId === null
+  out(
+    `[agent-migration] version=${version} agents=${agentTable ? 'yes' : 'no'} ` +
+      `legacyTask=${task ? 'kept' : 'missing'} legacySchedule=${schedule ? 'kept' : 'missing'}`
+  )
+  out(pass ? '[smoke] PASS（v8 → v10 Agent 迁移零丢失）' : '[smoke] FAIL（Agent 迁移）')
+  process.exit(pass ? 0 : 1)
+}
+
+async function runAgentCrudSmoke(): Promise<void> {
+  const input = {
+    method: 'saveAgent' as const,
+    name: '  Research Agent  ',
+    description: '负责带引用的研究任务',
+    instructions: '优先核验一手来源。',
+    defaultRecipeId: 'deep-research',
+    defaultBudgetUsd: 2,
+    maxConcurrentRuns: 1
+  }
+  const created = (await handleRpc(input)) as AgentView
+  await new Promise((resolve) => setTimeout(resolve, 5))
+  const updated = (await handleRpc({
+    ...input,
+    id: created.id,
+    name: created.name,
+    description: '负责可审计的研究任务'
+  })) as AgentView
+  const duplicateBlocked = await rpcFails(
+    { ...input, name: created.name },
+    /名称已存在/
+  )
+  const recipeBlocked = await rpcFails(
+    { ...input, name: 'Invalid Recipe Agent', defaultRecipeId: 'missing-recipe' },
+    /Recipe/
+  )
+
+  const schedule = (await handleRpc({
+    method: 'saveSchedule',
+    name: 'Agent 引用计划',
+    goal: '定时研究',
+    inputPath: '',
+    recipeId: 'deep-research',
+    cadence: 'daily',
+    timeOfDay: '08:00'
+  })) as { id: string }
+  getDb().prepare('UPDATE schedules SET agent_id=? WHERE id=?').run(created.id, schedule.id)
+  const activeScheduleBlocked = await rpcFails(
+    { method: 'setAgentEnabled', agentId: created.id, enabled: false },
+    /暂停或改绑/
+  )
+  await handleRpc({ method: 'setScheduleEnabled', scheduleId: schedule.id, enabled: false })
+  const disabled = (await handleRpc({
+    method: 'setAgentEnabled',
+    agentId: created.id,
+    enabled: false
+  })) as AgentView
+  const reenabled = (await handleRpc({
+    method: 'setAgentEnabled',
+    agentId: created.id,
+    enabled: true
+  })) as AgentView
+  const pausedScheduleDeleteBlocked = await rpcFails(
+    { method: 'deleteAgent', agentId: created.id },
+    /定时计划/
+  )
+  await handleRpc({ method: 'deleteSchedule', scheduleId: schedule.id })
+
+  const task = (await handleRpc({
+    method: 'createTask',
+    goal: '保持旧任务创建行为',
+    inputPath: '',
+    recipeId: 'deep-research'
+  })) as TaskView
+  getDb().prepare('UPDATE tasks SET agent_id=? WHERE id=?').run(created.id, task.id)
+  const taskDeleteBlocked = await rpcFails(
+    { method: 'deleteAgent', agentId: created.id },
+    /任务/
+  )
+  getDb().prepare('UPDATE tasks SET agent_id=NULL WHERE id=?').run(task.id)
+  await handleRpc({ method: 'deleteAgent', agentId: created.id })
+  const remaining = (await handleRpc({ method: 'listAgents' })) as AgentView[]
+
+  const pass =
+    created.name === 'Research Agent' &&
+    updated.description === '负责可审计的研究任务' &&
+    updated.updatedAt !== created.updatedAt &&
+    duplicateBlocked &&
+    recipeBlocked &&
+    activeScheduleBlocked &&
+    !disabled.enabled &&
+    reenabled.enabled &&
+    pausedScheduleDeleteBlocked &&
+    task.status === 'draft' &&
+    taskDeleteBlocked &&
+    !remaining.some((agent) => agent.id === created.id)
+  out(
+    `[agent-crud] trim=${created.name === 'Research Agent'} update=${updated.updatedAt !== created.updatedAt} ` +
+      `duplicate=${duplicateBlocked} recipe=${recipeBlocked} activeSchedule=${activeScheduleBlocked} ` +
+      `disable=${!disabled.enabled} reenable=${reenabled.enabled} deleteGuards=${pausedScheduleDeleteBlocked && taskDeleteBlocked}`
+  )
+  out(pass ? '[smoke] PASS（Agent CRUD 与引用保护）' : '[smoke] FAIL（Agent CRUD）')
+  process.exit(pass ? 0 : 1)
 }
 
 async function runScheduleSmoke(): Promise<void> {

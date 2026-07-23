@@ -13,8 +13,14 @@ import { fileEditRecipe, getRecipe, listRecipes, registerRecipe, unregisterRecip
 import { buildCustomRecipe } from './custom-recipe'
 import { validateCustomRecipeInput } from '../shared/custom-recipe'
 import { nextOccurrence, validateScheduleInput } from '../shared/schedule'
+import {
+  agentDeleteBlocker,
+  agentDisableBlocker,
+  validateAgentInput
+} from '../shared/agent'
 import { parseRefineInstructions, validatePresetInput, validateProjectInput, validateRuleSetInput } from '../shared/verify'
 import type {
+  AgentView,
   DeliverableView,
   DeliverableDetailView,
   DeliverableHistoryView,
@@ -109,6 +115,14 @@ export async function handleRpc(req: RpcRequest): Promise<unknown> {
       return testProvider(req.providerId)
     case 'mcpStatus':
       return getMcpStatus()
+    case 'listAgents':
+      return listAgents()
+    case 'saveAgent':
+      return saveAgent(req)
+    case 'setAgentEnabled':
+      return setAgentEnabled(req.agentId, req.enabled)
+    case 'deleteAgent':
+      return deleteAgent(req.agentId)
     case 'listProjects':
       return listProjects()
     case 'saveProject':
@@ -363,6 +377,103 @@ function listPresets(): PresetView[] {
 
 function deletePreset(presetId: string): void {
   getDb().prepare('DELETE FROM task_presets WHERE id = ?').run(presetId)
+}
+
+function listAgents(): AgentView[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT id, name, description, instructions, default_recipe_id as defaultRecipeId,
+              default_budget_usd as defaultBudgetUsd,
+              max_concurrent_runs as maxConcurrentRuns, enabled,
+              created_at as createdAt, updated_at as updatedAt
+       FROM agents ORDER BY updated_at DESC, name ASC`
+    )
+    .all() as (Omit<AgentView, 'enabled'> & { enabled: number })[]
+  return rows.map((row) => ({ ...row, enabled: Boolean(row.enabled) }))
+}
+
+function saveAgent(req: Extract<RpcRequest, { method: 'saveAgent' }>): AgentView {
+  const validation = validateAgentInput(req)
+  if (!validation.ok) throw new Error(validation.detail)
+  if (validation.value.defaultRecipeId) getRecipe(validation.value.defaultRecipeId)
+
+  const db = getDb()
+  const id = req.id ?? uid()
+  const timestamp = now()
+  const values = [
+    validation.value.name,
+    validation.value.description,
+    validation.value.instructions,
+    validation.value.defaultRecipeId,
+    validation.value.defaultBudgetUsd,
+    validation.value.maxConcurrentRuns,
+    timestamp
+  ]
+  try {
+    if (req.id) {
+      const result = db
+        .prepare(
+          `UPDATE agents
+           SET name=?, description=?, instructions=?, default_recipe_id=?,
+               default_budget_usd=?, max_concurrent_runs=?, updated_at=?
+           WHERE id=?`
+        )
+        .run(...values, id)
+      if (result.changes !== 1) throw new Error('Agent 不存在')
+    } else {
+      db.prepare(
+        `INSERT INTO agents
+         (id, name, description, instructions, default_recipe_id, default_budget_usd,
+          max_concurrent_runs, enabled, created_at, updated_at)
+         VALUES (?,?,?,?,?,?,?,1,?,?)`
+      ).run(id, ...values.slice(0, 6), timestamp, timestamp)
+    }
+  } catch (error) {
+    if (String((error as Error).message).includes('UNIQUE')) {
+      throw new Error('Agent 名称已存在')
+    }
+    throw error
+  }
+  return listAgents().find((agent) => agent.id === id) as AgentView
+}
+
+function setAgentEnabled(agentId: string, enabled: boolean): AgentView {
+  const db = getDb()
+  if (!db.prepare('SELECT id FROM agents WHERE id = ?').get(agentId)) {
+    throw new Error('Agent 不存在')
+  }
+  if (!enabled) {
+    const row = db
+      .prepare('SELECT COUNT(*) as count FROM schedules WHERE agent_id = ? AND enabled = 1')
+      .get(agentId) as { count: number }
+    const blocker = agentDisableBlocker(row.count)
+    if (blocker) throw new Error(blocker)
+  }
+  db.prepare('UPDATE agents SET enabled = ?, updated_at = ? WHERE id = ?').run(
+    enabled ? 1 : 0,
+    now(),
+    agentId
+  )
+  return listAgents().find((agent) => agent.id === agentId) as AgentView
+}
+
+function deleteAgent(agentId: string): void {
+  const db = getDb()
+  if (!db.prepare('SELECT id FROM agents WHERE id = ?').get(agentId)) {
+    throw new Error('Agent 不存在')
+  }
+  const task = db
+    .prepare('SELECT COUNT(*) as count FROM tasks WHERE agent_id = ?')
+    .get(agentId) as { count: number }
+  const schedule = db
+    .prepare('SELECT COUNT(*) as count FROM schedules WHERE agent_id = ?')
+    .get(agentId) as { count: number }
+  const blocker = agentDeleteBlocker({
+    taskCount: task.count,
+    scheduleCount: schedule.count
+  })
+  if (blocker) throw new Error(blocker)
+  db.prepare('DELETE FROM agents WHERE id = ?').run(agentId)
 }
 
 function listProjects(): ProjectView[] {

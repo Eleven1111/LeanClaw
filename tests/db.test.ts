@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { pendingMigrations, type Migration } from '../src/runtime/db'
+import { MIGRATIONS, pendingMigrations, type Migration } from '../src/runtime/db'
 
 const noop = (): void => undefined
 
@@ -42,5 +42,11 @@ describe('pendingMigrations（迁移框架）', () => {
     const original = [...migrations]
     pendingMigrations(0, migrations)
     expect(migrations).toEqual(original)
+  })
+
+  it('产品 Phase 2 的 Agent 迁移保持 v1–v10 连续递增', () => {
+    expect(MIGRATIONS.map((migration) => migration.version)).toEqual([
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10
+    ])
   })
 })

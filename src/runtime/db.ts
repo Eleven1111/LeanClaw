@@ -6,9 +6,24 @@ let db: Database.Database | null = null
 let dataDir = ''
 
 const SCHEMA = `
+CREATE TABLE IF NOT EXISTS agents (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  description TEXT NOT NULL DEFAULT '',
+  instructions TEXT NOT NULL DEFAULT '',
+  default_recipe_id TEXT,
+  default_budget_usd REAL,
+  max_concurrent_runs INTEGER NOT NULL DEFAULT 1,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS tasks (
   id TEXT PRIMARY KEY,
   project_id TEXT,
+  agent_id TEXT,
+  agent_name_snapshot TEXT,
+  agent_instructions_snapshot TEXT,
   goal TEXT NOT NULL,
   brief TEXT,
   input_path TEXT NOT NULL,
@@ -195,6 +210,7 @@ CREATE TABLE IF NOT EXISTS schedules (
   input_path TEXT NOT NULL DEFAULT '',
   recipe_id TEXT NOT NULL,
   project_id TEXT,
+  agent_id TEXT,
   budget_usd REAL,
   cadence TEXT NOT NULL,
   time_of_day TEXT NOT NULL,
@@ -339,6 +355,40 @@ export const MIGRATIONS: Migration[] = [
         created_at TEXT NOT NULL,
         archived_at TEXT NOT NULL
       )`)
+    }
+  },
+  {
+    version: 9,
+    up(database) {
+      database.exec(`CREATE TABLE IF NOT EXISTS agents (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        description TEXT NOT NULL DEFAULT '',
+        instructions TEXT NOT NULL DEFAULT '',
+        default_recipe_id TEXT,
+        default_budget_usd REAL,
+        max_concurrent_runs INTEGER NOT NULL DEFAULT 1,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )`)
+    }
+  },
+  {
+    version: 10,
+    up(database) {
+      if (!hasColumn(database, 'tasks', 'agent_id')) {
+        database.exec('ALTER TABLE tasks ADD COLUMN agent_id TEXT')
+      }
+      if (!hasColumn(database, 'tasks', 'agent_name_snapshot')) {
+        database.exec('ALTER TABLE tasks ADD COLUMN agent_name_snapshot TEXT')
+      }
+      if (!hasColumn(database, 'tasks', 'agent_instructions_snapshot')) {
+        database.exec('ALTER TABLE tasks ADD COLUMN agent_instructions_snapshot TEXT')
+      }
+      if (!hasColumn(database, 'schedules', 'agent_id')) {
+        database.exec('ALTER TABLE schedules ADD COLUMN agent_id TEXT')
+      }
     }
   }
 ]
