@@ -1,8 +1,15 @@
 import { useEffect, useState } from 'react'
-import type { AgentView, ProjectView, RecipeView, TaskView } from '../../shared/types'
+import type {
+  AgentView,
+  NeedYouItemView,
+  ProjectView,
+  RecipeView,
+  TaskView
+} from '../../shared/types'
 import { StatusChip } from './TaskWorkspace'
 import { Schedules } from './Schedules'
 import { actionPhrase } from '../../shared/progress'
+import { NeedYouList } from './NeedYou'
 
 const DEFAULT_RECIPE_ID = 'file-edit-summarize'
 const RESEARCH_GOAL = '研究 AI Agent 桌面应用的最新发展，输出带引用的分析报告。'
@@ -31,13 +38,23 @@ interface InitialPreset {
 
 export function Home({
   tasks,
+  needYouItems,
+  needYouLoading,
+  needYouError,
+  onRefreshNeedYou,
   onOpen,
   initialPreset,
+  onViewAllNeedYou,
   onViewAllDelivered
 }: {
   tasks: TaskView[]
+  needYouItems: NeedYouItemView[]
+  needYouLoading: boolean
+  needYouError: string
+  onRefreshNeedYou: () => Promise<void>
   onOpen: (id: string) => void
   initialPreset?: InitialPreset
+  onViewAllNeedYou: () => void
   onViewAllDelivered: () => void
 }): React.JSX.Element {
   const [goal, setGoal] = useState(initialPreset?.goal ?? '')
@@ -122,7 +139,6 @@ export function Home({
     }
   }
 
-  const needYou = tasks.filter((t) => t.userStatus === 'Waiting for You' || t.userStatus === 'Blocked')
   const running = tasks.filter((t) => ['Planning', 'Running', 'Verifying'].includes(t.userStatus))
   const delivered = tasks
     .filter((t) => t.userStatus === 'Delivered')
@@ -138,12 +154,25 @@ export function Home({
         </div>
       </div>
 
-      {needYou.length > 0 && (
-        <section>
-          <h2>需要你处理</h2>
-          {needYou.map((t) => (
-            <TaskRow key={t.id} t={t} onOpen={onOpen} />
-          ))}
+      {(needYouItems.length > 0 || needYouError) && (
+        <section className="home-need-you">
+          <div className="section-head">
+            <div>
+              <h2>需要你处理</h2>
+              <p>{needYouItems.length} 个事项正在等待决定</p>
+            </div>
+            <button className="ghost small" onClick={onViewAllNeedYou} aria-label="查看全部待处理">
+              查看全部 →
+            </button>
+          </div>
+          <NeedYouList
+            items={needYouItems.slice(0, 3)}
+            loading={needYouLoading}
+            error={needYouError}
+            onRefresh={onRefreshNeedYou}
+            onOpenTask={onOpen}
+            compact
+          />
         </section>
       )}
 

@@ -3,6 +3,7 @@ import { existsSync, readdirSync, statSync } from 'fs'
 import { join } from 'path'
 import { appendEvent, archiveTaskEvents } from './ledger'
 import { getTaskActivity } from './activity'
+import { listNeedYouItems } from './need-you'
 import {
   getRuntimeOverview,
   resolveProviderForConnectionTest
@@ -120,6 +121,8 @@ export async function handleRpc(req: RpcRequest): Promise<unknown> {
       return getTaskActivity(req.taskId, req.limit, req.beforeSeq)
     case 'getRuntimeOverview':
       return getRuntimeOverview()
+    case 'listNeedYouItems':
+      return listNeedYouItems()
     case 'savePreset':
       return savePreset(req.name, req.goal, req.recipeId, req.inputPath)
     case 'listPresets':
@@ -985,10 +988,26 @@ function resolveApproval(approvalId: string, decision: 'approved' | 'rejected'):
 function resolveAndon(andonId: string, action: 'retry' | 'cancel'): TaskView {
   const db = getDb()
   const andon = db.prepare('SELECT * FROM andon_events WHERE id = ?').get(andonId) as
-    | { id: string; task_id: string; run_id: string; status: string; resume_step_index: number | null }
+    | {
+        id: string
+        task_id: string
+        run_id: string
+        status: string
+        resume_step_index: number | null
+        recommended_actions: string
+      }
     | undefined
   if (!andon) throw new Error('Andon 不存在: ' + andonId)
   if (andon.status !== 'open') throw new Error('Andon 已处理过')
+  let allowedActions: unknown
+  try {
+    allowedActions = JSON.parse(andon.recommended_actions)
+  } catch {
+    throw new Error('Andon 恢复动作无效')
+  }
+  if (!Array.isArray(allowedActions) || !allowedActions.includes(action)) {
+    throw new Error(`Andon 不允许动作: ${action}`)
+  }
   db.prepare(
     `UPDATE andon_events SET status = 'resolved', chosen_action = ?, resolved_at = ? WHERE id = ?`
   ).run(action, now(), andonId)

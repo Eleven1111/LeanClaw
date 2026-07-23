@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { AgentView, PresetView, RuntimeOverviewView, TaskView } from '../../shared/types'
+import type {
+  AgentView,
+  NeedYouItemView,
+  PresetView,
+  RuntimeOverviewView,
+  TaskView
+} from '../../shared/types'
 import { Home } from './Home'
 import { Settings, type SettingsSection } from './Settings'
 import { TaskWorkspace } from './TaskWorkspace'
@@ -10,6 +16,7 @@ import { Tasks } from './Tasks'
 import { Projects } from './Projects'
 import { Agents } from './Agents'
 import { RuntimeCenter, runtimeOverallLabel } from './RuntimeCenter'
+import { NeedYou } from './NeedYou'
 import type { TaskFilter } from './Tasks'
 import { CommandPalette, type PaletteCommand } from './CommandPalette'
 import appIconUrl from '../../../resources/icon.png'
@@ -18,6 +25,7 @@ type ViewId =
   | 'home'
   | 'task'
   | 'tasks'
+  | 'needYou'
   | 'projects'
   | 'agents'
   | 'deliverables'
@@ -39,6 +47,7 @@ type NavGroup = 'workspace' | 'assets' | 'system'
 const NAV_ITEMS: { id: ViewId; label: string; title: string; group: NavGroup }[] = [
   { id: 'home', label: 'Home', title: '发起任务', group: 'workspace' },
   { id: 'tasks', label: 'Tasks', title: '任务', group: 'workspace' },
+  { id: 'needYou', label: 'Need You', title: '需要你处理', group: 'workspace' },
   { id: 'projects', label: 'Projects', title: '项目', group: 'workspace' },
   { id: 'agents', label: 'Agent', title: 'Agent', group: 'workspace' },
   { id: 'deliverables', label: 'Deliverables', title: '交付物', group: 'assets' },
@@ -57,6 +66,7 @@ const PAGE_TITLES: Record<ViewId, string> = {
   home: '新任务',
   task: '任务详情',
   tasks: '任务',
+  needYou: '需要你处理',
   projects: '项目',
   agents: 'Agent',
   deliverables: '交付物',
@@ -78,8 +88,13 @@ export function App(): React.JSX.Element {
   const [runtimeOverview, setRuntimeOverview] = useState<RuntimeOverviewView | null>(null)
   const [runtimeLoading, setRuntimeLoading] = useState(true)
   const [runtimeError, setRuntimeError] = useState('')
+  const [needYouItems, setNeedYouItems] = useState<NeedYouItemView[]>([])
+  const [needYouLoading, setNeedYouLoading] = useState(true)
+  const [needYouError, setNeedYouError] = useState('')
   const runtimeRequest = useRef<Promise<void> | null>(null)
   const runtimeRefreshQueued = useRef(false)
+  const needYouRequest = useRef<Promise<void> | null>(null)
+  const needYouRefreshQueued = useRef(false)
   const contentArea = useRef<HTMLDivElement | null>(null)
 
   const refreshRuntimeOverview = useCallback((): Promise<void> => {
@@ -115,15 +130,45 @@ export function App(): React.JSX.Element {
     setTasks(Object.fromEntries(list.map((t) => [t.id, t])))
   }, [])
 
+  const refreshNeedYou = useCallback((): Promise<void> => {
+    if (needYouRequest.current) {
+      needYouRefreshQueued.current = true
+      return needYouRequest.current
+    }
+    setNeedYouLoading(true)
+    setNeedYouError('')
+    const request = (async () => {
+      try {
+        const items = (await window.api.rpc({
+          method: 'listNeedYouItems'
+        })) as NeedYouItemView[]
+        setNeedYouItems(items)
+      } catch {
+        setNeedYouError('刷新失败，待处理事项仍保留在当前页面。')
+      } finally {
+        setNeedYouLoading(false)
+        needYouRequest.current = null
+        if (needYouRefreshQueued.current) {
+          needYouRefreshQueued.current = false
+          void refreshNeedYou()
+        }
+      }
+    })()
+    needYouRequest.current = request
+    return request
+  }, [])
+
   useEffect(() => {
     void refresh()
+    void refreshNeedYou()
     return window.api.onPush((e) => {
       if (e.type === 'task') {
         setTasks((prev) => ({ ...prev, [e.task.id]: e.task }))
         void refreshRuntimeOverview()
+        void refreshNeedYou()
       }
     })
-  }, [refresh, refreshRuntimeOverview])
+  }, [refresh, refreshNeedYou, refreshRuntimeOverview])
 
   useEffect(() => {
     void refreshRuntimeOverview()
@@ -277,6 +322,16 @@ export function App(): React.JSX.Element {
         onOpenSettings={openSettings}
       />
     )
+  } else if (view === 'needYou') {
+    content = (
+      <NeedYou
+        items={needYouItems}
+        loading={needYouLoading}
+        error={needYouError}
+        onRefresh={refreshNeedYou}
+        onOpenTask={openTask}
+      />
+    )
   } else if (view === 'settings') {
     content = (
       <Settings
@@ -288,8 +343,13 @@ export function App(): React.JSX.Element {
     content = (
       <Home
         tasks={list}
+        needYouItems={needYouItems}
+        needYouLoading={needYouLoading}
+        needYouError={needYouError}
+        onRefreshNeedYou={refreshNeedYou}
         onOpen={openTask}
         initialPreset={initialPreset}
+        onViewAllNeedYou={() => navigate('needYou')}
         onViewAllDelivered={() => openTasksFiltered('Delivered')}
       />
     )
@@ -303,6 +363,7 @@ export function App(): React.JSX.Element {
 
   const navCount = (id: ViewId): number | null => {
     if (id === 'tasks') return list.length
+    if (id === 'needYou') return needYouItems.length
     if (id === 'deliverables') return deliveredCount
     return null
   }

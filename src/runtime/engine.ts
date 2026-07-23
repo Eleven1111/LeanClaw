@@ -72,9 +72,11 @@ export function openAndon(
   impact: string,
   actions: string[],
   resumeStepIndex: number,
-  actor: EventActor = { type: 'system' }
+  actor: EventActor = { type: 'system' },
+  category: 'general' | 'budget' = 'general'
 ): void {
   const db = getDb()
+  const andonId = uid()
   let finalReason = reason
   let finalActions = actions
   if (stepId) {
@@ -93,8 +95,25 @@ export function openAndon(
     `INSERT INTO andon_events
      (id, task_id, run_id, step_id, reason, impact, recommended_actions, resume_step_index, status, created_at)
      VALUES (?,?,?,?,?,?,?,?, 'open', ?)`
-  ).run(uid(), taskId, runId, stepId, finalReason, impact, JSON.stringify(finalActions), resumeStepIndex, now())
-  appendEvent(taskId, 'andon-opened', { reason: finalReason }, runId, stepId, actor)
+  ).run(
+    andonId,
+    taskId,
+    runId,
+    stepId,
+    finalReason,
+    impact,
+    JSON.stringify(finalActions),
+    resumeStepIndex,
+    now()
+  )
+  appendEvent(
+    taskId,
+    'andon-opened',
+    { andonId, category, reason: finalReason },
+    runId,
+    stepId,
+    actor
+  )
   transition(taskId, 'andon_open')
 }
 
@@ -363,7 +382,8 @@ function makeCtx(task: TaskRow, run: RunRow, step: StepRow, tpl: { tier?: ModelT
             '此前步骤的产物仍然有效；可追加预算后重试当前步骤。',
             ['retry', 'cancel'],
             run.current_step_index,
-            actor
+            actor,
+            'budget'
           )
           throw new Suspend()
         }

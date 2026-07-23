@@ -2962,3 +2962,337 @@ button.activity-row-actionable:focus-visible {
     animation: none;
   }
 }
+
+/* Need You */
+.need-you-page {
+  max-width: 1000px;
+}
+
+.need-you-page-head,
+.need-you-card,
+.need-you-card-topline,
+.need-you-meta,
+.need-you-actions,
+.need-you-page-error,
+.need-you-state,
+.need-you-budget > div {
+  display: flex;
+  align-items: center;
+}
+
+.need-you-page-head {
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 22px;
+}
+
+.need-you-page-head .sub {
+  max-width: 620px;
+  margin-bottom: 0;
+}
+
+.need-you-eyebrow {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--accent);
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.14em;
+}
+
+.need-you-summary {
+  min-width: 82px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--panel);
+  box-shadow: var(--shadow-soft);
+  text-align: center;
+}
+
+.need-you-summary strong,
+.need-you-summary span {
+  display: block;
+}
+
+.need-you-summary strong {
+  font-size: 23px;
+  font-variant-numeric: tabular-nums;
+}
+
+.need-you-summary span {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.need-you-list {
+  display: grid;
+  gap: 10px;
+}
+
+.need-you-page-error {
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 12px;
+  border: 1px solid color-mix(in srgb, var(--red) 25%, var(--border));
+  border-radius: 10px;
+  color: var(--red);
+  background: color-mix(in srgb, var(--red) 6%, var(--panel));
+}
+
+.need-you-card {
+  align-items: stretch;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--orange);
+  border-radius: 14px;
+  background: var(--panel);
+  box-shadow: var(--shadow-soft);
+}
+
+.need-you-card.urgency-3 {
+  border-left-color: var(--red);
+}
+
+.need-you-card-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 16px 18px;
+}
+
+.need-you-card-topline {
+  gap: 8px;
+  margin-bottom: 9px;
+}
+
+.need-you-type {
+  padding: 3px 7px;
+  border-radius: 999px;
+  color: var(--orange);
+  background: color-mix(in srgb, var(--orange) 11%, transparent);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.need-you-type.verification_failed,
+.need-you-type.blocked {
+  color: var(--red);
+  background: color-mix(in srgb, var(--red) 10%, transparent);
+}
+
+.need-you-wait {
+  color: var(--muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.need-you-card h3 {
+  font-size: 15px;
+  letter-spacing: -0.01em;
+}
+
+.need-you-task-link {
+  max-width: 100%;
+  margin: 4px 0 7px;
+  overflow: hidden;
+  color: var(--accent);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.need-you-card-main > p {
+  max-width: 660px;
+  color: var(--muted);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.need-you-meta {
+  flex-wrap: wrap;
+  gap: 7px 14px;
+  margin-top: 11px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.need-you-action-panel {
+  width: 232px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border-left: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-muted) 42%, var(--panel));
+}
+
+.need-you-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.need-you-actions button {
+  min-height: 30px;
+  padding: 6px 10px;
+  font-size: 11px;
+}
+
+.need-you-budget {
+  width: 100%;
+}
+
+.need-you-budget > span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.need-you-budget > div {
+  gap: 7px;
+  padding-left: 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.need-you-budget > div > span {
+  color: var(--muted);
+}
+
+.need-you-budget input {
+  width: 100%;
+  min-width: 0;
+  padding: 7px 8px 7px 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.need-you-action-error {
+  width: 100%;
+  color: var(--red);
+  font-size: 10px;
+  line-height: 1.35;
+  text-align: right;
+}
+
+.need-you-state {
+  justify-content: flex-start;
+  gap: 13px;
+  min-height: 92px;
+  padding: 18px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 14px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--panel) 60%, transparent);
+}
+
+.need-you-state > div {
+  flex: 1;
+}
+
+.need-you-state strong {
+  color: var(--text);
+}
+
+.need-you-state p {
+  margin-top: 4px;
+  font-size: 11px;
+}
+
+.need-you-state-mark {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border: 8px solid color-mix(in srgb, var(--green) 16%, transparent);
+  border-radius: 50%;
+  background: var(--green);
+  background-clip: content-box;
+}
+
+.home-need-you {
+  margin-bottom: 22px;
+}
+
+.home-need-you .section-head {
+  align-items: flex-end;
+  margin-bottom: 9px;
+}
+
+.home-need-you .section-head p {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.need-you-list.compact .need-you-card-main {
+  padding: 13px 15px;
+}
+
+.need-you-list.compact .need-you-card-main > p,
+.need-you-list.compact .need-you-meta {
+  display: none;
+}
+
+.need-you-list.compact .need-you-action-panel {
+  width: 210px;
+  padding: 11px 13px;
+}
+
+@media (max-width: 900px) {
+  .need-you-page {
+    padding: 22px 24px 44px;
+  }
+
+  .need-you-card {
+    flex-direction: column;
+  }
+
+  .need-you-action-panel,
+  .need-you-list.compact .need-you-action-panel {
+    width: 100%;
+    align-items: center;
+    justify-content: space-between;
+    flex-flow: row wrap;
+    padding: 10px 14px;
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+
+  .need-you-budget {
+    max-width: 180px;
+  }
+
+  .need-you-action-error {
+    text-align: left;
+  }
+}
+
+@media (max-width: 680px) {
+  .need-you-page-head {
+    align-items: flex-start;
+  }
+
+  .need-you-summary {
+    min-width: 70px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .need-you-card *,
+  .need-you-card *::before,
+  .need-you-card *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}

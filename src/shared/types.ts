@@ -509,6 +509,37 @@ export interface RuntimeOverviewView {
   }
 }
 
+export type NeedYouItemType =
+  | 'approval'
+  | 'andon'
+  | 'verification_failed'
+  | 'blocked'
+  | 'budget'
+
+export type NeedYouAction =
+  | 'approve'
+  | 'retry'
+  | 'retry_checkpoint'
+  | 'add_budget'
+  | 'open_task'
+  | 'reject'
+  | 'cancel'
+
+export interface NeedYouItemView {
+  id: string
+  type: NeedYouItemType
+  urgency: 1 | 2 | 3
+  taskId: string
+  taskGoal: string
+  agentName: string | null
+  title: string
+  detail: string
+  createdAt: string
+  primaryAction: NeedYouAction
+  secondaryActions: NeedYouAction[]
+  sourceId: string | null
+}
+
 export type RpcRequest =
   | { method: 'listTasks' }
   | { method: 'getTask'; taskId: string }
@@ -531,6 +562,7 @@ export type RpcRequest =
   | { method: 'getRunDetail'; taskId: string }
   | { method: 'getTaskActivity'; taskId: string; limit?: number; beforeSeq?: number }
   | { method: 'getRuntimeOverview' }
+  | { method: 'listNeedYouItems' }
   | { method: 'savePreset'; name: string; goal: string; recipeId: string; inputPath: string }
   | { method: 'listPresets' }
   | { method: 'deletePreset'; presetId: string }
