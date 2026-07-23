@@ -4,6 +4,7 @@ import { parseEvidenceLocator } from '../../shared/verify'
 import { RichDeliverablePreview } from './RichDeliverablePreview'
 import { VersionCompare } from './VersionCompare'
 import { actionPhrase, formatDurationReference } from '../../shared/progress'
+import { redactTaskPrivatePaths } from '../../shared/privacy'
 import { Presence } from './Presence'
 import {
   TaskActivityFeed,
@@ -572,6 +573,7 @@ export function TaskWorkspace({
               <ul>
                 {task.evidence.map((e) => {
                   const { source } = parseEvidenceLocator(e.locator)
+                  const displayedSource = redactTaskPrivatePaths(source, task.inputPath)
                   const isWeb = /^https?:\/\//.test(source)
                   return (
                     <li
@@ -600,7 +602,7 @@ export function TaskWorkspace({
                           </a>
                         ) : (
                           <>
-                            <span>{source}</span>{' '}
+                            <span>{displayedSource}</span>{' '}
                             <button className="link" onClick={() => void window.api.reveal(source)}>
                               在 Finder 中显示
                             </button>

@@ -501,12 +501,22 @@ async function waitForAutomationTask(taskId: string): Promise<TaskView> {
 }
 
 async function runAutomationSmoke(): Promise<void> {
+  const agent = await handleRpc({
+    method: 'saveAgent',
+    name: 's18 Automation Agent',
+    description: '验证同一 Agent 的手动与定时任务',
+    instructions: '按既有安全链生成可核验摘要。',
+    defaultRecipeId: 'file-edit-summarize',
+    defaultBudgetUsd: 1.5,
+    maxConcurrentRuns: 1
+  }) as AgentView
   const schedule = await handleRpc({
     method: 'saveSchedule',
     name: 's18 Automation',
     goal: '把文件整理成带引用摘要',
     inputPath: getSamplePath(),
     recipeId: 'file-edit-summarize',
+    agentId: agent.id,
     cadence: 'daily',
     timeOfDay: '23:59'
   }) as { id: string; nextRunAt: string }
@@ -515,6 +525,7 @@ async function runAutomationSmoke(): Promise<void> {
     method: 'triggerScheduleNow',
     scheduleId: schedule.id
   }) as TaskView
+  await handleRpc({ method: 'setScheduleEnabled', scheduleId: schedule.id, enabled: false })
   const manualFinal = await waitForAutomationTask(manual.id)
   const afterManual = (await handleRpc({ method: 'listSchedules' }) as Array<{
     id: string
@@ -525,6 +536,7 @@ async function runAutomationSmoke(): Promise<void> {
     scheduleId: schedule.id,
     limit: 5
   }) as Array<{ taskId: string; triggerSource: string }>
+  await handleRpc({ method: 'setScheduleEnabled', scheduleId: schedule.id, enabled: true })
 
   const at = new Date()
   getDb().prepare('UPDATE schedules SET next_run_at = ? WHERE id = ?')
@@ -544,12 +556,15 @@ async function runAutomationSmoke(): Promise<void> {
     limit: 5
   }) as Array<{ taskId: string; triggerSource: string }>
   const taskRows = getDb().prepare(
-    `SELECT id,schedule_id as scheduleId,schedule_trigger_source as triggerSource
+    `SELECT id,schedule_id as scheduleId,schedule_trigger_source as triggerSource,
+            agent_id as agentId,agent_name_snapshot as agentName
      FROM tasks WHERE schedule_id = ? ORDER BY created_at`
   ).all(schedule.id) as Array<{
     id: string
     scheduleId: string
     triggerSource: string
+    agentId: string | null
+    agentName: string | null
   }>
   const finalSchedule = (await handleRpc({ method: 'listSchedules' }) as Array<{
     id: string
@@ -565,6 +580,7 @@ async function runAutomationSmoke(): Promise<void> {
     manualHistory[0]?.triggerSource === 'manual' &&
     taskRows.length === 2 &&
     taskRows.every((row) => row.scheduleId === schedule.id) &&
+    taskRows.every((row) => row.agentId === agent.id && row.agentName === agent.name) &&
     new Set(taskRows.map((row) => row.triggerSource)).size === 2 &&
     sources.has('manual') &&
     sources.has('scheduled') &&
@@ -573,7 +589,8 @@ async function runAutomationSmoke(): Promise<void> {
   out(
     `[automation] manual=${manualFinal.status} scheduled=${scheduledFinal.status} ` +
       `tasks=${taskRows.length} sources=${[...sources].sort().join('/')} ` +
-      `manualNextUnchanged=${afterManual?.nextRunAt === originalNext}`
+      `manualNextUnchanged=${afterManual?.nextRunAt === originalNext} ` +
+      `agentBound=${taskRows.every((row) => row.agentId === agent.id)} pauseKeptTask=${manualFinal.status === 'delivered'}`
   )
   out(
     pass

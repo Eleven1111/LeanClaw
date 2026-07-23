@@ -4,6 +4,7 @@ import {
   sortNeedYouItems,
   type NeedYouCandidate
 } from '../shared/need-you'
+import { redactTaskPrivatePaths } from '../shared/privacy'
 import type { NeedYouItemType, NeedYouItemView } from '../shared/types'
 
 interface NeedYouRow {
@@ -11,6 +12,7 @@ interface NeedYouRow {
   type: NeedYouItemType
   taskId: string
   taskGoal: string
+  inputPath: string
   agentName: string | null
   detail: string
   createdAt: string
@@ -38,6 +40,7 @@ export function listNeedYouItems(): NeedYouItemView[] {
          'approval' AS type,
          t.id AS taskId,
          t.goal AS taskGoal,
+         t.input_path AS inputPath,
          t.agent_name_snapshot AS agentName,
          a.action_desc AS detail,
          a.requested_at AS createdAt,
@@ -92,6 +95,7 @@ export function listNeedYouItems(): NeedYouItemView[] {
          END AS type,
          t.id AS taskId,
          t.goal AS taskGoal,
+         t.input_path AS inputPath,
          t.agent_name_snapshot AS agentName,
          a.reason ||
            CASE WHEN TRIM(a.impact) = '' THEN '' ELSE '；' || a.impact END AS detail,
@@ -109,6 +113,7 @@ export function listNeedYouItems(): NeedYouItemView[] {
          'verification_failed' AS type,
          t.id AS taskId,
          t.goal AS taskGoal,
+         t.input_path AS inputPath,
          t.agent_name_snapshot AS agentName,
          COALESCE(v.detail, '存在未通过的验证') AS detail,
          COALESCE(v.created_at, t.updated_at) AS createdAt,
@@ -138,6 +143,7 @@ export function listNeedYouItems(): NeedYouItemView[] {
          'blocked' AS type,
          t.id AS taskId,
          t.goal AS taskGoal,
+         t.input_path AS inputPath,
          t.agent_name_snapshot AS agentName,
          '执行失败，需要打开任务查看上下文并决定下一步。' AS detail,
          t.updated_at AS createdAt,
@@ -152,6 +158,7 @@ export function listNeedYouItems(): NeedYouItemView[] {
     rows.map((row) =>
       projectNeedYouCandidate({
         ...row,
+        detail: redactTaskPrivatePaths(row.detail, row.inputPath),
         recommendedActions: parseRecommendedActions(row.recommendedActions)
       } satisfies NeedYouCandidate)
     )

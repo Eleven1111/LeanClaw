@@ -5,6 +5,10 @@ import type { InternalStatus, RunDetailView, TaskView } from '../shared/types'
 import { publish } from './bus'
 import { getQueuePosition } from './scheduler'
 import { medianDurationMs } from '../shared/progress'
+import {
+  projectSafeRunEventPayload,
+  redactTaskPrivatePaths
+} from '../shared/privacy'
 
 export function buildTaskView(taskId: string): TaskView {
   const db = getDb()
@@ -100,7 +104,7 @@ export function buildTaskView(taskId: string): TaskView {
   return {
     id: t.id,
     goal: t.goal,
-    brief: t.brief,
+    brief: redactTaskPrivatePaths(t.brief, t.input_path),
     inputPath: t.input_path,
     status: t.status,
     userStatus: USER_STATUS_MAP[t.status],
@@ -120,21 +124,21 @@ export function buildTaskView(taskId: string): TaskView {
       kind: s.kind,
       status: s.status,
       attempt: s.attempt,
-      outputSummary: s.output_summary,
+      outputSummary: redactTaskPrivatePaths(s.output_summary, t.input_path),
       estimatedDurationMs: medianDurationMs(durationsByStep.get(s.idx) ?? [])
     })),
     approvals: approvals.map((a) => ({
       id: a.id,
       stepId: a.step_id,
-      actionDesc: a.action_desc,
-      diff: a.diff,
+      actionDesc: redactTaskPrivatePaths(a.action_desc, t.input_path),
+      diff: redactTaskPrivatePaths(a.diff, t.input_path),
       status: a.status
     })),
     andons: andons.map((a) => ({
       id: a.id,
       stepId: a.step_id,
-      reason: a.reason,
-      impact: a.impact,
+      reason: redactTaskPrivatePaths(a.reason, t.input_path),
+      impact: redactTaskPrivatePaths(a.impact, t.input_path),
       recommendedActions: JSON.parse(a.recommended_actions) as string[],
       status: a.status
     })),
@@ -155,7 +159,7 @@ export function buildTaskView(taskId: string): TaskView {
       stepId: v.step_id,
       kind: v.kind,
       status: v.status,
-      detail: v.detail
+      detail: redactTaskPrivatePaths(v.detail, t.input_path)
     })),
     evidence: evidence.map((e) => ({
       id: e.id,
@@ -195,8 +199,8 @@ export function publishTask(taskId: string): void {
 
 export function buildRunDetail(taskId: string): RunDetailView {
   const db = getDb()
-  const task = db.prepare('SELECT id FROM tasks WHERE id = ?').get(taskId) as
-    | { id: string }
+  const task = db.prepare('SELECT id, input_path FROM tasks WHERE id = ?').get(taskId) as
+    | { id: string; input_path: string }
     | undefined
   if (!task) throw new Error('任务不存在: ' + taskId)
   const run = db
@@ -311,7 +315,7 @@ export function buildRunDetail(taskId: string): RunDetailView {
       kind: s.kind as RunDetailView['steps'][number]['kind'],
       status: s.status as RunDetailView['steps'][number]['status'],
       attempt: s.attempt,
-      outputSummary: s.output_summary,
+      outputSummary: redactTaskPrivatePaths(s.output_summary, task.input_path),
       startedAt: s.started_at,
       endedAt: s.ended_at,
       toolCalls: (toolCallsByStep.get(s.id) ?? []).map((tc) => ({
@@ -321,8 +325,8 @@ export function buildRunDetail(taskId: string): RunDetailView {
         status: tc.status,
         riskLevel: tc.risk_level as RunDetailView['steps'][number]['toolCalls'][number]['riskLevel'],
         retryCount: tc.retry_count,
-        outputSummary: tc.output_summary,
-        error: tc.error,
+        outputSummary: redactTaskPrivatePaths(tc.output_summary, task.input_path),
+        error: redactTaskPrivatePaths(tc.error, task.input_path),
         startedAt: tc.started_at,
         endedAt: tc.ended_at
       })),
@@ -333,21 +337,21 @@ export function buildRunDetail(taskId: string): RunDetailView {
         tokensOut: mc.tokens_out,
         costUsd: mc.cost_usd,
         status: mc.status,
-        error: mc.error,
+        error: redactTaskPrivatePaths(mc.error, task.input_path),
         createdAt: mc.created_at
       })),
       verifications: (verificationsByStep.get(s.id) ?? []).map((v) => ({
         id: v.id,
         kind: v.kind as RunDetailView['steps'][number]['verifications'][number]['kind'],
         status: v.status as RunDetailView['steps'][number]['verifications'][number]['status'],
-        detail: v.detail
+        detail: redactTaskPrivatePaths(v.detail, task.input_path)
       }))
     })),
     events: events.map((e) => ({
       seq: e.seq,
       type: e.type,
       stepId: e.step_id,
-      payload: e.payload,
+      payload: projectSafeRunEventPayload(e.type, e.payload),
       createdAt: e.created_at
     }))
   }
