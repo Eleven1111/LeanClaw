@@ -469,6 +469,46 @@ export interface ActivityView {
   createdAt: string
 }
 
+export interface RuntimeOverviewView {
+  overall: 'ready' | 'busy' | 'degraded' | 'offline'
+  runtime: {
+    state: 'ready' | 'busy' | 'offline'
+    startedAt: string | null
+    activeTasks: number
+    queuedTasks: number
+    maxActiveTasks: number
+  }
+  providers: Array<{
+    id: string
+    name: string
+    configured: boolean
+    defaultModel: string
+    lastTestStatus: 'passed' | 'failed' | 'unknown'
+    lastTestedAt: string | null
+    errorSummary: string | null
+  }>
+  mcp: Array<{
+    id: string
+    name: string
+    state: McpServerState
+    toolCount: number
+    errorSummary: string | null
+  }>
+  shell: {
+    enabled: boolean
+    allowPrefixCount: number
+    risk: 'forbidden' | 'approval_required'
+  }
+  usage7d: {
+    runs: number
+    modelCalls: number
+    toolCalls: number
+    tokensIn: number
+    tokensOut: number
+    costUsd: number
+  }
+}
+
 export type RpcRequest =
   | { method: 'listTasks' }
   | { method: 'getTask'; taskId: string }
@@ -490,6 +530,7 @@ export type RpcRequest =
   | { method: 'getDataGovernanceStats' }
   | { method: 'getRunDetail'; taskId: string }
   | { method: 'getTaskActivity'; taskId: string; limit?: number; beforeSeq?: number }
+  | { method: 'getRuntimeOverview' }
   | { method: 'savePreset'; name: string; goal: string; recipeId: string; inputPath: string }
   | { method: 'listPresets' }
   | { method: 'deletePreset'; presetId: string }

@@ -122,3 +122,20 @@ export function release(taskId: string): void {
 export function getQueuePosition(taskId: string): number | null {
   return queuePositionOf(queue, taskId)
 }
+
+export function removeQueuedRun(taskId: string): void {
+  queue = queue.filter((queuedTaskId) => queuedTaskId !== taskId)
+  pendingRerun.delete(taskId)
+}
+
+export function getSchedulerSnapshot(): {
+  activeTasks: number
+  queuedTasks: number
+  maxActiveTasks: number
+} {
+  return {
+    activeTasks: activeSlots.size,
+    queuedTasks: queue.length,
+    maxActiveTasks: maxActiveTasks()
+  }
+}

@@ -3,16 +3,21 @@ import { existsSync, readdirSync, statSync } from 'fs'
 import { join } from 'path'
 import { appendEvent, archiveTaskEvents } from './ledger'
 import { getTaskActivity } from './activity'
+import {
+  getRuntimeOverview,
+  resolveProviderForConnectionTest
+} from './runtime-overview'
 import { getStatus, transition } from './state'
 import { buildRunDetail, buildTaskView, listTaskViews, publishTask } from './views'
 import { getActiveRun } from './engine'
-import { requestRun } from './scheduler'
+import { removeQueuedRun, requestRun } from './scheduler'
 import { getRuntimeConfig } from './config'
 import { completeWith } from './model'
 import { getMcpStatus } from './mcp'
 import { fileEditRecipe, getRecipe, listRecipes, registerRecipe, unregisterRecipe } from './recipe'
 import { buildCustomRecipe } from './custom-recipe'
 import { validateCustomRecipeInput } from '../shared/custom-recipe'
+import { canTransition } from '../shared/machine'
 import { nextOccurrence, validateScheduleInput } from '../shared/schedule'
 import type { DueSchedule } from './schedules'
 import {
@@ -113,6 +118,8 @@ export async function handleRpc(req: RpcRequest): Promise<unknown> {
       return getRunDetail(req.taskId)
     case 'getTaskActivity':
       return getTaskActivity(req.taskId, req.limit, req.beforeSeq)
+    case 'getRuntimeOverview':
+      return getRuntimeOverview()
     case 'savePreset':
       return savePreset(req.name, req.goal, req.recipeId, req.inputPath)
     case 'listPresets':
@@ -167,7 +174,7 @@ export async function handleRpc(req: RpcRequest): Promise<unknown> {
 }
 
 async function testProvider(providerId: string): Promise<TestProviderResult> {
-  const provider = getRuntimeConfig().providers.find((p) => p.id === providerId)
+  const provider = resolveProviderForConnectionTest(providerId, getRuntimeConfig())
   if (!provider) return { ok: false, message: '服务商不存在或配置尚未同步' }
   if (!provider.apiKey) return { ok: false, message: '未设置密钥，无法测试连接' }
   const controller = new AbortController()
@@ -906,6 +913,11 @@ function startTask(taskId: string): TaskView {
 }
 
 function pauseTask(taskId: string): TaskView {
+  const status = getStatus(taskId)
+  if (status !== 'paused_by_user' && !canTransition(status, 'paused_by_user')) {
+    throw new Error(`非法状态转换 ${status} -> paused_by_user（task ${taskId}）`)
+  }
+  removeQueuedRun(taskId)
   transition(taskId, 'paused_by_user')
   appendEvent(taskId, 'paused-by-user', undefined, null, null, USER_ACTOR)
   return buildTaskView(taskId)
@@ -919,6 +931,11 @@ function resumeTask(taskId: string): TaskView {
 }
 
 function stopTask(taskId: string): TaskView {
+  const status = getStatus(taskId)
+  if (status !== 'cancelled_by_user' && !canTransition(status, 'cancelled_by_user')) {
+    throw new Error(`非法状态转换 ${status} -> cancelled_by_user（task ${taskId}）`)
+  }
+  removeQueuedRun(taskId)
   transition(taskId, 'cancelled_by_user')
   const db = getDb()
   db.prepare(

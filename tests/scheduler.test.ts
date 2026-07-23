@@ -3,8 +3,10 @@ import {
   agentCapacityAvailable,
   dequeueNext,
   enqueue,
+  getSchedulerSnapshot,
   queuePositionOf,
   release,
+  removeQueuedRun,
   requestRun
 } from '../src/runtime/scheduler'
 
@@ -176,13 +178,49 @@ describe('requestRun / release（技术债 #11：活跃任务重入不再静默�
     requestRun('a-2')
     requestRun('b-1')
     expect(driveMock.mock.calls.map(([taskId]) => taskId)).toEqual(['a-1', 'b-1'])
+    expect(getSchedulerSnapshot()).toEqual({
+      activeTasks: 2,
+      queuedTasks: 1,
+      maxActiveTasks: 3
+    })
 
     pending.get('a-1')?.resolve()
     await flushMicrotasks()
     expect(driveMock.mock.calls.map(([taskId]) => taskId)).toEqual(['a-1', 'b-1', 'a-2'])
+    expect(getSchedulerSnapshot()).toEqual({
+      activeTasks: 2,
+      queuedTasks: 0,
+      maxActiveTasks: 3
+    })
 
     pending.get('b-1')?.resolve()
     pending.get('a-2')?.resolve()
     await flushMicrotasks()
+    expect(getSchedulerSnapshot()).toEqual({
+      activeTasks: 0,
+      queuedTasks: 0,
+      maxActiveTasks: 3
+    })
+  })
+
+  it('暂停或取消前移除排队项，不让 overview 继续计数', async () => {
+    const active = deferred<void>()
+    driveMock.mockReturnValue(active.promise)
+    getStatusMock.mockReturnValue('queued')
+    getAgentPolicyMock.mockReturnValue({
+      agentId: 'agent-a',
+      maxConcurrentRuns: 1
+    })
+
+    requestRun('queued-owner')
+    requestRun('queued-to-remove')
+    expect(getSchedulerSnapshot().queuedTasks).toBe(1)
+
+    removeQueuedRun('queued-to-remove')
+    expect(getSchedulerSnapshot().queuedTasks).toBe(0)
+
+    active.resolve()
+    await flushMicrotasks()
+    expect(driveMock.mock.calls.map(([taskId]) => taskId)).toEqual(['queued-owner'])
   })
 })
