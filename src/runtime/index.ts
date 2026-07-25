@@ -68,9 +68,17 @@ logRuntime('runtime-starting')
 initDb(dataDir)
 syncCustomRecipes()
 recoverAfterRestart()
-startScheduleLoop(async (schedule) => {
-  createAndStartScheduledTask(schedule, 'scheduled')
-})
+startScheduleLoop(
+  async (schedule) => {
+    createAndStartScheduledTask(schedule, 'scheduled')
+  },
+  ({ scheduleId, error }) =>
+    logRuntime('schedule-trigger-failed', {
+      level: 'error',
+      ...(scheduleId === null ? {} : { code: scheduleId }),
+      error
+    })
+)
 
 const parentPort = (process as unknown as { parentPort?: ParentPort }).parentPort
 
