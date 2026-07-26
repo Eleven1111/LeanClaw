@@ -9,8 +9,14 @@ import {
   projectSafeRunEventPayload,
   redactTaskPrivatePaths
 } from '../shared/privacy'
+import {
+  buildStepDurationIndex,
+  queryRecipeStepDurations,
+  stepDurationsFor,
+  type StepDurationIndex
+} from './step-durations'
 
-export function buildTaskView(taskId: string): TaskView {
+export function buildTaskView(taskId: string, stepDurations?: StepDurationIndex): TaskView {
   const db = getDb()
   const t = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId) as
     | {
@@ -59,18 +65,9 @@ export function buildTaskView(taskId: string): TaskView {
   const evidence = db
     .prepare('SELECT * FROM evidence WHERE task_id = ? ORDER BY created_at')
     .all(taskId) as any[]
-  const historicalDurations = db.prepare(
-    `SELECT s.idx, s.started_at, s.ended_at
-     FROM steps s JOIN runs r ON r.id = s.run_id
-     WHERE r.recipe_id = ? AND s.started_at IS NOT NULL AND s.ended_at IS NOT NULL`
-  ).all(t.recipe_id) as { idx: number; started_at: string; ended_at: string }[]
-  const durationsByStep = new Map<number, number[]>()
-  for (const item of historicalDurations) {
-    const duration = new Date(item.ended_at).getTime() - new Date(item.started_at).getTime()
-    const values = durationsByStep.get(item.idx) ?? []
-    values.push(duration)
-    durationsByStep.set(item.idx, values)
-  }
+  const durationsByStep = stepDurations
+    ? stepDurationsFor(stepDurations, t.recipe_id)
+    : queryRecipeStepDurations(t.recipe_id)
   const mc = run
     ? (db
         .prepare(
@@ -190,7 +187,8 @@ export function listTaskViews(): TaskView[] {
   const ids = getDb()
     .prepare('SELECT id FROM tasks ORDER BY created_at DESC')
     .all() as { id: string }[]
-  return ids.map((r) => buildTaskView(r.id))
+  const stepDurations = buildStepDurationIndex()
+  return ids.map((r) => buildTaskView(r.id, stepDurations))
 }
 
 export function publishTask(taskId: string): void {

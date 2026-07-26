@@ -200,7 +200,7 @@ function legacyCounts(dbPath: string): Record<string, number> {
   return row
 }
 
-test('Phase 2 旅程 E：真实 v8 数据升级到 v12 后兼容、可归档并可重启', async () => {
+test('Phase 2 旅程 E：真实 v8 数据升级到 v13 后兼容、可归档并可重启', async () => {
   test.setTimeout(90_000)
   const rendererErrors: string[] = []
 
@@ -260,8 +260,39 @@ test('Phase 2 旅程 E：真实 v8 数据升级到 v12 后兼容、可归档并�
        (SELECT actor_name_snapshot FROM run_events WHERE task_id = 'legacy-task' LIMIT 1)
          AS eventActorName`
   )
+  // v13 索引是列表投影性能的结构保证，不依赖机器速度即可断言
+  const indexNames = sqlite(
+    dbPath,
+    `SELECT group_concat(name, ',') FROM sqlite_master
+     WHERE type = 'index' AND name LIKE 'idx_%' ORDER BY name`
+  )
+  for (const expected of [
+    'idx_run_events_task',
+    'idx_run_events_archive_task',
+    'idx_runs_task',
+    'idx_approvals_task',
+    'idx_andon_events_task',
+    'idx_artifacts_task',
+    'idx_evidence_task',
+    'idx_verifications_run',
+    'idx_model_calls_step',
+    'idx_tool_calls_step',
+    'idx_tasks_agent',
+    'idx_tasks_schedule',
+    'idx_schedules_agent'
+  ]) {
+    expect(indexNames).toContain(expected)
+  }
+  // 事件计数必须走索引，不能退回全表扫描
+  expect(
+    sqlite(
+      dbPath,
+      `EXPLAIN QUERY PLAN SELECT COUNT(*) FROM run_events WHERE task_id = 'legacy-task'`
+    )
+  ).toContain('idx_run_events_task')
+
   expect(migration).toEqual({
-    version: 12,
+    version: 13,
     agents: 0,
     taskAgentId: null,
     taskAgentName: null,
@@ -319,7 +350,7 @@ test('Phase 2 旅程 E：真实 v8 数据升级到 v12 后兼容、可归档并�
   ;({ app, window, dataDir } = launched)
   watchRendererErrors(window, rendererErrors)
 
-  expect(sqlite(dbPath, 'SELECT version FROM schema_version LIMIT 1')).toBe('12')
+  expect(sqlite(dbPath, 'SELECT version FROM schema_version LIMIT 1')).toBe('13')
   await window.getByRole('button', { name: 'Tasks' }).click()
   await window.locator('.filter-chip', { hasText: 'Archived' }).click()
   await window

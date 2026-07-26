@@ -11,6 +11,7 @@ import { closeApp, launchApp, type LaunchedApp } from './helpers'
 const TASK_COUNT = 1_000
 const AGENT_COUNT = 100
 const EVENTS_PER_TASK = 200
+const STEPS_PER_RUN = 7
 const SCHEDULE_COUNT = 50
 const MCP_COUNT = 20
 const MB = 1024 * 1024
@@ -98,8 +99,11 @@ function seedPerformanceDatabase(dataDir: string): void {
                printf('-%d seconds', x - 1))
     FROM n;
 
+    -- 每个 Task 都有 Run 与 Step：真实使用中没有"只有 Task 没有 Run"的任务，
+    -- 而步骤时长参考值会按 recipe 聚合历史 Step，缺了它就测不到这条真实路径。
+    -- 21–29 保留 failed 状态与原有 run id，以免影响验证失败相关断言。
     WITH RECURSIVE n(x) AS (
-      SELECT 21 UNION ALL SELECT x + 1 FROM n WHERE x < 30
+      SELECT 1 UNION ALL SELECT x + 1 FROM n WHERE x < ${TASK_COUNT}
     )
     INSERT INTO runs
       (id, task_id, recipe_id, status, current_step_index, started_at, ended_at)
@@ -107,11 +111,34 @@ function seedPerformanceDatabase(dataDir: string): void {
       printf('perf-run-%04d', x),
       printf('perf-task-%04d', x),
       'file-edit-summarize',
-      'failed',
+      CASE WHEN x BETWEEN 21 AND 29 THEN 'failed' ELSE 'succeeded' END,
       0,
       '2026-07-23T12:00:00.000Z',
       '2026-07-23T12:00:01.000Z'
     FROM n;
+
+    WITH RECURSIVE
+      run_number(x) AS (
+        SELECT 1 UNION ALL SELECT x + 1 FROM run_number WHERE x < ${TASK_COUNT}
+      ),
+      step_number(y) AS (
+        SELECT 0 UNION ALL SELECT y + 1 FROM step_number WHERE y < ${STEPS_PER_RUN - 1}
+      )
+    INSERT INTO steps
+      (id, run_id, idx, name, title, kind, status, attempt, started_at, ended_at)
+    SELECT
+      printf('perf-step-%04d-%d', x, y),
+      printf('perf-run-%04d', x),
+      y,
+      'read_input',
+      printf('性能夹具步骤 %d', y),
+      'tool',
+      'succeeded',
+      1,
+      '2026-07-23T12:00:00.000Z',
+      strftime('%Y-%m-%dT%H:%M:%fZ', '2026-07-23T12:00:00Z',
+               printf('+%d seconds', y + 1))
+    FROM run_number CROSS JOIN step_number;
 
     WITH RECURSIVE n(x) AS (
       SELECT 1 UNION ALL SELECT x + 1 FROM n WHERE x < 10
@@ -275,7 +302,9 @@ test('Phase 2 性能：规模数据保持窗口化、分页、固定聚合与稳
     )
     .toBe(TASK_COUNT)
   const taskHydrationMs = performance.now() - hydrationStarted
-  expect(taskHydrationMs).toBeLessThan(60_000)
+  // 修复前同规模（且更轻的）夹具为 8.4s；本机稳态 1.3-1.7s、冷启动最坏 2.8s。
+  // 阈值取最坏观测值的约 3 倍：足以对退回未加索引/未提取步骤时长的行为报红，又不至于抖动。
+  expect(taskHydrationMs).toBeLessThan(8_000)
 
   await window.evaluate(async (servers) => {
     const api = (

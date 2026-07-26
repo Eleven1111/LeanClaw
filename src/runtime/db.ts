@@ -420,6 +420,29 @@ export const MIGRATIONS: Migration[] = [
         database.exec('ALTER TABLE tasks ADD COLUMN schedule_trigger_source TEXT')
       }
     }
+  },
+  {
+    // 此前全库没有任何索引，列表投影的每条 `WHERE <fk> = ?` 都是全表扫描。
+    // 1000 Task / 200k 事件时，仅事件计数一项就是 1000 次 20 万行扫描。
+    // steps 由既有 UNIQUE(run_id, idx) 覆盖，无需重复建索引。
+    version: 13,
+    up(database) {
+      database.exec(`
+        CREATE INDEX IF NOT EXISTS idx_run_events_task ON run_events(task_id);
+        CREATE INDEX IF NOT EXISTS idx_run_events_archive_task ON run_events_archive(task_id);
+        CREATE INDEX IF NOT EXISTS idx_runs_task ON runs(task_id);
+        CREATE INDEX IF NOT EXISTS idx_approvals_task ON approvals(task_id);
+        CREATE INDEX IF NOT EXISTS idx_andon_events_task ON andon_events(task_id);
+        CREATE INDEX IF NOT EXISTS idx_artifacts_task ON artifacts(task_id);
+        CREATE INDEX IF NOT EXISTS idx_evidence_task ON evidence(task_id);
+        CREATE INDEX IF NOT EXISTS idx_verifications_run ON verifications(run_id);
+        CREATE INDEX IF NOT EXISTS idx_model_calls_step ON model_calls(step_id);
+        CREATE INDEX IF NOT EXISTS idx_tool_calls_step ON tool_calls(step_id);
+        CREATE INDEX IF NOT EXISTS idx_tasks_agent ON tasks(agent_id);
+        CREATE INDEX IF NOT EXISTS idx_tasks_schedule ON tasks(schedule_id);
+        CREATE INDEX IF NOT EXISTS idx_schedules_agent ON schedules(agent_id);
+      `)
+    }
   }
 ]
 

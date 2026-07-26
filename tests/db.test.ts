@@ -44,10 +44,46 @@ describe('pendingMigrations（迁移框架）', () => {
     expect(migrations).toEqual(original)
   })
 
-  it('产品 Phase 2 的迁移保持 v1–v12 连续递增', () => {
+  it('产品 Phase 2 的迁移保持 v1–v13 连续递增', () => {
     expect(MIGRATIONS.map((migration) => migration.version)).toEqual([
-      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13
     ])
+  })
+
+  it('v13 为列表投影的每条热查询建立索引，且可重复执行', () => {
+    const statements: string[] = []
+    const database = {
+      prepare: () => ({ all: () => [] }),
+      exec(sql: string) {
+        statements.push(sql)
+      }
+    }
+
+    const v13 = MIGRATIONS.find((migration) => migration.version === 13)
+    v13?.up(database as never)
+    v13?.up(database as never)
+
+    const sql = statements.join('\n')
+    for (const target of [
+      'run_events(task_id)',
+      'run_events_archive(task_id)',
+      'runs(task_id)',
+      'approvals(task_id)',
+      'andon_events(task_id)',
+      'artifacts(task_id)',
+      'evidence(task_id)',
+      'verifications(run_id)',
+      'model_calls(step_id)',
+      'tool_calls(step_id)',
+      'tasks(agent_id)',
+      'tasks(schedule_id)',
+      'schedules(agent_id)'
+    ]) {
+      expect(sql).toContain(target)
+    }
+    // 幂等：重复执行不会因索引已存在而失败
+    expect(sql.match(/CREATE INDEX/g)?.length).toBe(26)
+    expect(sql).not.toMatch(/CREATE INDEX(?! IF NOT EXISTS)/)
   })
 
   it('v11 给热表与归档表补 actor 字段且不伪造旧事件身份', () => {
