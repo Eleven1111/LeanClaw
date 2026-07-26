@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { summarizeTaskView } from '../../shared/task-summary'
 import type {
   AgentView,
   NeedYouItemView,
   PresetView,
   RuntimeOverviewView,
+  TaskSummaryView,
   TaskView
 } from '../../shared/types'
 import { Home } from './Home'
@@ -81,7 +83,9 @@ const PAGE_TITLES: Record<ViewId, string> = {
 }
 
 export function App(): React.JSX.Element {
-  const [tasks, setTasks] = useState<Record<string, TaskView>>({})
+  // 列表/看板/命令面板只吃轻量摘要；完整 TaskView 仅为当前打开的任务保留。
+  const [tasks, setTasks] = useState<Record<string, TaskSummaryView>>({})
+  const [taskDetails, setTaskDetails] = useState<Record<string, TaskView>>({})
   const [view, setView] = useState<ViewId>('home')
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const [initialPreset, setInitialPreset] = useState<InitialPreset | undefined>(undefined)
@@ -130,7 +134,7 @@ export function App(): React.JSX.Element {
   }, [])
 
   const refresh = useCallback(async () => {
-    const list = (await window.api.rpc({ method: 'listTasks' })) as TaskView[]
+    const list = (await window.api.rpc({ method: 'listTasks' })) as TaskSummaryView[]
     setTasks(Object.fromEntries(list.map((t) => [t.id, t])))
   }, [])
 
@@ -167,7 +171,10 @@ export function App(): React.JSX.Element {
     void refreshNeedYou()
     return window.api.onPush((e) => {
       if (e.type === 'task') {
-        setTasks((prev) => ({ ...prev, [e.task.id]: e.task }))
+        // 推送始终携带完整 TaskView：单个任务的体积可忽略，
+        // 详情页因此保持实时，列表行由同一份数据派生，不需要第二次往返。
+        setTaskDetails((prev) => ({ ...prev, [e.task.id]: e.task }))
+        setTasks((prev) => ({ ...prev, [e.task.id]: summarizeTaskView(e.task) }))
         void refreshRuntimeOverview()
         void refreshNeedYou()
       }
@@ -180,8 +187,28 @@ export function App(): React.JSX.Element {
     return () => window.clearInterval(timer)
   }, [refreshRuntimeOverview])
 
+  // 详情按需加载：列表不再携带明细，打开任务时补齐一次，其后由推送维持实时。
+  useEffect(() => {
+    if (!selectedTaskId || taskDetails[selectedTaskId]) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const detail = (await window.api.rpc({
+          method: 'getTask',
+          taskId: selectedTaskId
+        })) as TaskView
+        if (!cancelled) setTaskDetails((prev) => ({ ...prev, [detail.id]: detail }))
+      } catch {
+        // 任务可能已被删除或归档；列表仍可用，详情页保持加载态。
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [selectedTaskId, taskDetails])
+
   const list = Object.values(tasks).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-  const current = selectedTaskId ? tasks[selectedTaskId] : null
+  const current = selectedTaskId ? taskDetails[selectedTaskId] ?? null : null
 
   const openTask = (id: string): void => {
     setSelectedTaskId(id)
@@ -265,15 +292,15 @@ export function App(): React.JSX.Element {
       hint: task.userStatus,
       run: () => openTask(task.id)
     }))
-    const deliverableCommands = list.flatMap((task) => task.artifacts
-      .filter((artifact) => artifact.isDeliverable)
-      .map((artifact) => ({
+    const deliverableCommands = list.flatMap((task) =>
+      task.deliverables.map((artifact) => ({
         id: `artifact-${artifact.id}`,
         label: `交付物 · ${artifact.title}`,
         keywords: [task.goal, `v${artifact.version}`],
         hint: `v${artifact.version}`,
         run: () => openTask(task.id)
-      })))
+      }))
+    )
     return [
       {
         id: 'new-task',

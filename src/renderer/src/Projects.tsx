@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
-import type { ProjectView, TaskView } from '../../shared/types'
+import type { ProjectView, TaskSummaryView } from '../../shared/types'
 import { EmptyState } from './EmptyState'
 
 const EMPTY = { name: '', description: '', savedInstructions: '' }
 
-export function Projects({ tasks, onOpenTask }: { tasks: TaskView[]; onOpenTask: (id: string) => void }): React.JSX.Element {
+export function Projects({ tasks, onOpenTask }: { tasks: TaskSummaryView[]; onOpenTask: (id: string) => void }): React.JSX.Element {
   const [projects, setProjects] = useState<ProjectView[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [form, setForm] = useState(EMPTY)

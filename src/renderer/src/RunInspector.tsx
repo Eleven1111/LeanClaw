@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { RunDetailView, TaskView } from '../../shared/types'
+import type { RunDetailView, TaskSummaryView } from '../../shared/types'
 import { StatusChip, STEP_ICON } from './TaskWorkspace'
 import { EmptyState } from './EmptyState'
 
@@ -36,7 +36,7 @@ function TaskPicker({
   tasks,
   onSelectTask
 }: {
-  tasks: TaskView[]
+  tasks: TaskSummaryView[]
   onSelectTask: (id: string) => void
 }): React.JSX.Element {
   return (
@@ -72,7 +72,7 @@ export function RunInspector({
   initialStepId
 }: {
   taskId: string | null
-  tasks: TaskView[]
+  tasks: TaskSummaryView[]
   onSelectTask: (id: string) => void
   onBackToTask: (taskId: string) => void
   initialStepId: string | null

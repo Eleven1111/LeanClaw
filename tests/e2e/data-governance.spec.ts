@@ -23,8 +23,12 @@ test('归档压缩事件、配置快照配额，并窗口化 100+ 任务', async
 
   const delivered = await window.evaluate(async () => {
     const api = (globalThis as unknown as { api: { rpc: (request: unknown) => Promise<unknown> } }).api
-    const tasks = await api.rpc({ method: 'listTasks' }) as { id: string; metrics: { eventCount: number } }[]
-    return tasks[0]
+    const tasks = await api.rpc({ method: 'listTasks' }) as { id: string }[]
+    // 事件计数属于完整 TaskView，列表摘要不含 metrics
+    return api.rpc({ method: 'getTask', taskId: tasks[0].id }) as Promise<{
+      id: string
+      metrics: { eventCount: number }
+    }>
   })
   await window.getByRole('button', { name: 'Tasks' }).click()
   await window.locator('.filter-chip', { hasText: 'Delivered' }).click()

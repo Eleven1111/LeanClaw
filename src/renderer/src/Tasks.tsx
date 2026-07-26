@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import type { InternalStatus, RpcRequest, TaskView, UserStatus } from '../../shared/types'
+import type { InternalStatus, RpcRequest, TaskSummaryView, UserStatus } from '../../shared/types'
+import { summaryStepPhrase } from '../../shared/task-summary'
 import { StatusChip } from './TaskWorkspace'
 import { calculateVirtualWindow } from '../../shared/virtual-list'
 import { actionPhrase } from '../../shared/progress'
@@ -39,7 +40,7 @@ const BOARD_COLUMNS: { status: UserStatus; label: string }[] = [
   { status: 'Blocked', label: '已阻塞' }
 ]
 
-function matchesFilter(t: TaskView, f: TaskFilter): boolean {
+function matchesFilter(t: TaskSummaryView, f: TaskFilter): boolean {
   switch (f) {
     case 'All':
       return true
@@ -60,18 +61,13 @@ function matchesFilter(t: TaskView, f: TaskFilter): boolean {
   }
 }
 
-function currentStepPhrase(t: TaskView): string {
-  const runningStep = t.steps.find((s) => s.status === 'running')
-  const lastDone = [...t.steps].reverse().find((s) => s.status === 'done')
-  return runningStep ? actionPhrase(runningStep.title) : lastDone?.outputSummary ?? lastDone?.title ?? ''
-}
 
 function TaskListRow({
   t,
   onOpen,
   onAction
 }: {
-  t: TaskView
+  t: TaskSummaryView
   onOpen: (id: string) => void
   onAction: (req: RpcRequest) => void
 }): React.JSX.Element {
@@ -92,7 +88,7 @@ function TaskListRow({
     <div className="task-row">
       <button className="task-row-main" onClick={() => onOpen(t.id)}>
         <span className="task-goal">{t.goal}</span>
-        <span className="task-progress">{currentStepPhrase(t)}</span>
+        <span className="task-progress">{summaryStepPhrase(t)}</span>
         {t.agentName && (
           <span className="task-agent" title={`Agent · ${t.agentName}`}>
             Agent · {t.agentName}
@@ -106,10 +102,10 @@ function TaskListRow({
   )
 }
 
-function KanbanCard({ t, onOpen }: { t: TaskView; onOpen: (id: string) => void }): React.JSX.Element {
+function KanbanCard({ t, onOpen }: { t: TaskSummaryView; onOpen: (id: string) => void }): React.JSX.Element {
   const taskCode = t.id.replaceAll('-', '').slice(-6).toUpperCase()
-  const modelCalls = t.metrics.modelCalls
-  const toolCalls = t.metrics.toolCalls
+  const modelCalls = t.modelCalls
+  const toolCalls = t.toolCalls
   return (
     <button className="grid-card kanban-card" onClick={() => onOpen(t.id)}>
       <div className="kanban-card-meta">
@@ -117,7 +113,7 @@ function KanbanCard({ t, onOpen }: { t: TaskView; onOpen: (id: string) => void }
         {t.queuePosition !== null && <span className="queue-badge">队列 #{t.queuePosition}</span>}
       </div>
       <div className="kanban-card-goal preset-goal">{t.goal}</div>
-      <div className="kanban-card-step muted">{currentStepPhrase(t)}</div>
+      <div className="kanban-card-step muted">{summaryStepPhrase(t)}</div>
       <div className="kanban-card-footer">
         <span
           className="kanban-project"
@@ -140,7 +136,7 @@ function TaskRows({
   onOpen,
   onAction
 }: {
-  tasks: TaskView[]
+  tasks: TaskSummaryView[]
   onOpen: (id: string) => void
   onAction: (req: RpcRequest) => void
 }): React.JSX.Element {
@@ -167,7 +163,7 @@ export function Tasks({
   initialFilter,
   onOpenTask
 }: {
-  tasks: TaskView[]
+  tasks: TaskSummaryView[]
   initialFilter?: TaskFilter
   onOpenTask: (taskId: string) => void
 }): React.JSX.Element {

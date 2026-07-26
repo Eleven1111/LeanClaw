@@ -618,6 +618,38 @@ export type RpcRequest =
   | { method: 'triggerScheduleNow'; scheduleId: string }
   | { method: 'getScheduleHistory'; scheduleId: string; limit?: number }
 
+export interface TaskSummaryDeliverable {
+  id: string
+  title: string
+  version: number
+}
+
+/**
+ * 列表、看板、Home、命令面板使用的轻量投影。
+ * 刻意不含 Brief、输入路径、预算、产物正文预览与任何明细集合——
+ * 千任务首屏曾因为在列表里搬运完整 TaskView 而付出数百毫秒的序列化与水合成本。
+ * 任务详情继续使用完整 `TaskView`（`getTask` 与任务推送）。
+ */
+export interface TaskSummaryView {
+  id: string
+  goal: string
+  status: InternalStatus
+  userStatus: UserStatus
+  recipeId: string
+  projectId: string | null
+  projectName: string | null
+  agentId: string | null
+  agentName: string | null
+  queuePosition: number | null
+  runningStepTitle: string | null
+  lastDoneLabel: string | null
+  modelCalls: number
+  toolCalls: number
+  deliverables: TaskSummaryDeliverable[]
+  createdAt: string
+  updatedAt: string
+}
+
 export interface PushEvent {
   type: 'task'
   task: TaskView

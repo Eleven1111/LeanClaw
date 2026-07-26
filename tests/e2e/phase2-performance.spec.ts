@@ -4,7 +4,8 @@ import { expect, test, type Page } from '@playwright/test'
 import type {
   ActivityView,
   NeedYouItemView,
-  RuntimeOverviewView
+  RuntimeOverviewView,
+  TaskSummaryView
 } from '../../src/shared/types'
 import { closeApp, launchApp, type LaunchedApp } from './helpers'
 
@@ -18,6 +19,9 @@ const MB = 1024 * 1024
 
 interface PerformanceResults {
   taskHydrationMs: number
+  listTasksRpcMs: number
+  listTasksBytes: number
+  getTaskRpcMs: number
   agentPageMs: number
   automationPageMs: number
   needYouRpcMs: number
@@ -139,6 +143,30 @@ function seedPerformanceDatabase(dataDir: string): void {
       strftime('%Y-%m-%dT%H:%M:%fZ', '2026-07-23T12:00:00Z',
                printf('+%d seconds', y + 1))
     FROM run_number CROSS JOIN step_number;
+
+    -- 交付物带正文：完整 TaskView 会把每个产物的前 4000 字符搬进列表投影，
+    -- 夹具此前一条 artifact 都没有，等于完全没测到真实使用中最大的一块 payload。
+    WITH RECURSIVE n(x) AS (
+      SELECT 1 UNION ALL SELECT x + 1 FROM n WHERE x < ${TASK_COUNT}
+    )
+    INSERT INTO artifacts
+      (id, task_id, run_id, step_id, type, title, version, content, mime_type,
+       producer, verification_status, is_deliverable, created_at)
+    SELECT
+      printf('perf-artifact-%04d', x),
+      printf('perf-task-%04d', x),
+      printf('perf-run-%04d', x),
+      printf('perf-step-%04d-0', x),
+      'report',
+      printf('性能夹具交付物 %04d', x),
+      1,
+      printf('%.*c', 6000, 'x'),
+      'text/markdown',
+      'fixture',
+      'verified',
+      1,
+      '2026-07-23T12:00:02.000Z'
+    FROM n;
 
     WITH RECURSIVE n(x) AS (
       SELECT 1 UNION ALL SELECT x + 1 FROM n WHERE x < 10
@@ -302,8 +330,10 @@ test('Phase 2 性能：规模数据保持窗口化、分页、固定聚合与稳
     )
     .toBe(TASK_COUNT)
   const taskHydrationMs = performance.now() - hydrationStarted
-  // 修复前同规模（且更轻的）夹具为 8.4s；本机稳态 1.3-1.7s、冷启动最坏 2.8s。
-  // 阈值取最坏观测值的约 3 倍：足以对退回未加索引/未提取步骤时长的行为报红，又不至于抖动。
+  // 注意：这个数字包含整个 Electron 启动过程，改造后已由启动耗时主导
+  // （数据路径见下方 listTasksRpcMs，约 30ms）。因此它只作为宽松安全网：
+  // 修复前同规模且更轻的夹具为 8.4s，本机稳态 0.55-0.69s、最坏观测 3.0s。
+  // 真正紧的、可归因且不随机器抖动的门是 listTasksRpcMs 与 listTasksBytes。
   expect(taskHydrationMs).toBeLessThan(8_000)
 
   await window.evaluate(async (servers) => {
@@ -352,6 +382,11 @@ test('Phase 2 性能：规模数据保持窗口化、分页、固定聚合与稳
       return { value, durationMs: performance.now() - started }
     }
 
+    // 列表 RPC 单独计时：把"取数据"与"渲染水合"分开，
+    // 否则一个混合数字无法归因下一次劣化到底出在哪一层。
+    const listTasks = await timed<TaskSummaryView[]>({ method: 'listTasks' })
+    const listTasksBytes = JSON.stringify(listTasks.value).length
+    const getTask = await timed<unknown>({ method: 'getTask', taskId: 'perf-task-0001' })
     const needYou = await timed<NeedYouItemView[]>({ method: 'listNeedYouItems' })
     const recent = await timed<ActivityView[]>({
       method: 'getTaskActivity',
@@ -368,9 +403,23 @@ test('Phase 2 性能：规模数据保持窗口化、分页、固定聚合与稳
     for (let attempt = 0; attempt < 5; attempt += 1) {
       runtime.push(await timed<RuntimeOverviewView>({ method: 'getRuntimeOverview' }))
     }
-    return { needYou, recent, older, runtime }
+    return { listTasks, listTasksBytes, getTask, needYou, recent, older, runtime }
   })
 
+  // 摘要投影：固定数量 SQL、与任务数无关，且不携带明细
+  expect(rpcMeasurements.listTasks.value).toHaveLength(TASK_COUNT)
+  expect(rpcMeasurements.listTasks.durationMs).toBeLessThan(1_000)
+  const firstSummary = rpcMeasurements.listTasks.value[0]
+  expect(firstSummary).not.toHaveProperty('brief')
+  expect(firstSummary).not.toHaveProperty('approvals')
+  expect(firstSummary).not.toHaveProperty('artifacts')
+  expect(firstSummary).not.toHaveProperty('metrics')
+  // 夹具每个任务带 6000 字正文的交付物；摘要绝不能把正文搬进列表
+  expect(JSON.stringify(rpcMeasurements.listTasks.value)).not.toContain('xxxxxxxxxx')
+  // 实测约 494 字节/任务；完整 TaskView 携带 4000 字正文预览时为 5000+ 字节/任务，
+  // 600 的上限足以拦住"把明细搬回列表"的回退。
+  expect(rpcMeasurements.listTasksBytes).toBeLessThan(TASK_COUNT * 600)
+  expect(rpcMeasurements.getTask.durationMs).toBeLessThan(1_000)
   expect(rpcMeasurements.needYou.value).toHaveLength(40)
   expect(rpcMeasurements.needYou.durationMs).toBeLessThan(2_500)
   expect(rpcMeasurements.recent.value).toHaveLength(50)
@@ -443,6 +492,9 @@ test('Phase 2 性能：规模数据保持窗口化、分页、固定聚合与稳
     taskHydrationMs,
     agentPageMs,
     automationPageMs,
+    listTasksRpcMs: rpcMeasurements.listTasks.durationMs,
+    listTasksBytes: rpcMeasurements.listTasksBytes,
+    getTaskRpcMs: rpcMeasurements.getTask.durationMs,
     needYouRpcMs: rpcMeasurements.needYou.durationMs,
     recentActivityRpcMs: rpcMeasurements.recent.durationMs,
     olderActivityRpcMs: rpcMeasurements.older.durationMs,

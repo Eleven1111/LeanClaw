@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
+import { summaryStepPhrase } from '../../shared/task-summary'
 import type {
   AgentView,
   NeedYouItemView,
   ProjectView,
   RecipeView,
+  TaskSummaryView,
   TaskView
 } from '../../shared/types'
 import { StatusChip } from './TaskWorkspace'
@@ -14,10 +16,8 @@ import { NeedYouList } from './NeedYou'
 const DEFAULT_RECIPE_ID = 'file-edit-summarize'
 const RESEARCH_GOAL = '研究 AI Agent 桌面应用的最新发展，输出带引用的分析报告。'
 
-function TaskRow({ t, onOpen }: { t: TaskView; onOpen: (id: string) => void }): React.JSX.Element {
-  const runningStep = t.steps.find((s) => s.status === 'running')
-  const lastDone = [...t.steps].reverse().find((s) => s.status === 'done')
-  const progress = runningStep ? actionPhrase(runningStep.title) : lastDone?.outputSummary ?? lastDone?.title ?? ''
+function TaskRow({ t, onOpen }: { t: TaskSummaryView; onOpen: (id: string) => void }): React.JSX.Element {
+  const progress = summaryStepPhrase(t)
   return (
     <button className="task-row" onClick={() => onOpen(t.id)}>
       <span className="task-goal">{t.goal}</span>
@@ -48,7 +48,7 @@ export function Home({
   onViewAllNeedYou,
   onViewAllDelivered
 }: {
-  tasks: TaskView[]
+  tasks: TaskSummaryView[]
   needYouItems: NeedYouItemView[]
   needYouLoading: boolean
   needYouError: string

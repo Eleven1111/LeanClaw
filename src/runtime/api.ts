@@ -10,7 +10,7 @@ import {
   resolveProviderForConnectionTest
 } from './runtime-overview'
 import { getStatus, transition } from './state'
-import { buildRunDetail, buildTaskView, listTaskViews, publishTask } from './views'
+import { buildRunDetail, buildTaskView, listTaskSummaries, publishTask } from './views'
 import { getActiveRun } from './engine'
 import { removeQueuedRun, requestRun } from './scheduler'
 import { getRuntimeConfig } from './config'
@@ -77,7 +77,7 @@ export async function handleRpc(req: RpcRequest): Promise<unknown> {
         sampleGoal: '把这个文件整理成一份带引用的摘要，保存为 Markdown。'
       }
     case 'listTasks':
-      return listTaskViews()
+      return listTaskSummaries()
     case 'getTask':
       return buildTaskView(req.taskId)
     case 'createTask':

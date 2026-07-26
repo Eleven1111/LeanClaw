@@ -65,19 +65,26 @@ test('Phase 2 旅程 A/B：Agent → Need You → Activity → Runtime，历史�
       id: string
       goal: string
       recipeId: string
-      budgetUsd: number | null
       agentName: string | null
     }>
-    const task = tasks.find((item) => item.goal === goal)
-    if (!task) throw new Error('未找到旅程 A Task')
+    const summary = tasks.find((item) => item.goal === goal)
+    if (!summary) throw new Error('未找到旅程 A Task')
+    // 预算固化只在完整 TaskView 上可见；列表摘要负责身份与 Recipe
+    const detail = (await api.rpc({ method: 'getTask', taskId: summary.id })) as {
+      recipeId: string
+      budgetUsd: number | null
+      agentName: string | null
+    }
     if (
-      task.recipeId !== 'file-edit-summarize' ||
-      task.budgetUsd !== 1.5 ||
-      task.agentName !== 'Phase2 Agent V1'
+      summary.recipeId !== 'file-edit-summarize' ||
+      summary.agentName !== 'Phase2 Agent V1' ||
+      detail.recipeId !== 'file-edit-summarize' ||
+      detail.budgetUsd !== 1.5 ||
+      detail.agentName !== 'Phase2 Agent V1'
     ) {
       throw new Error('Agent 默认值未原样固化')
     }
-    return task.id
+    return summary.id
   }, firstGoal)
 
   await expect(window.locator('.card.approval')).toBeVisible({ timeout: 30_000 })
@@ -159,19 +166,25 @@ test('Phase 2 旅程 A/B：Agent → Need You → Activity → Runtime，历史�
       id: string
       goal: string
       recipeId: string
-      budgetUsd: number | null
       agentName: string | null
     }>
-    const task = tasks.find((item) => item.goal === goal)
-    if (!task) throw new Error('未找到旅程 B Task')
+    const summary = tasks.find((item) => item.goal === goal)
+    if (!summary) throw new Error('未找到旅程 B Task')
+    const detail = (await api.rpc({ method: 'getTask', taskId: summary.id })) as {
+      recipeId: string
+      budgetUsd: number | null
+      agentName: string | null
+    }
     if (
-      task.recipeId !== 'content-pack' ||
-      task.budgetUsd !== 2.25 ||
-      task.agentName !== 'Phase2 Agent V2'
+      summary.recipeId !== 'content-pack' ||
+      summary.agentName !== 'Phase2 Agent V2' ||
+      detail.recipeId !== 'content-pack' ||
+      detail.budgetUsd !== 2.25 ||
+      detail.agentName !== 'Phase2 Agent V2'
     ) {
       throw new Error('更新后的 Agent 配置未用于新 Task')
     }
-    return task.id
+    return summary.id
   }, secondGoal)
   await window.evaluate(async (taskId) => {
     const api = (globalThis as unknown as {

@@ -38,14 +38,9 @@ export function stepDurationsFor(
 }
 
 /**
- * 一次查询覆盖全部 recipe。列表投影使用这个入口，避免每个 Task 重复查询同一 recipe
- * 的全部历史步骤（1000 个任务曾因此重复 1000 次相同工作）。
+ * 单任务入口（`getTask` 与任务推送）。列表页已改用 `listTaskSummaries` 的批量投影，
+ * 不再需要"一次构建全 recipe 索引"的入口。
  */
-export function buildStepDurationIndex(): StepDurationIndex {
-  return groupStepDurations(getDb().prepare(ROW_SQL).all() as StepDurationRow[])
-}
-
-/** 单任务路径（如 publishTask）的回退入口：只查该 recipe。 */
 export function queryRecipeStepDurations(recipeId: string): Map<number, number[]> {
   const rows = getDb()
     .prepare(`${ROW_SQL} AND r.recipe_id = ?`)

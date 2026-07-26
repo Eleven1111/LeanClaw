@@ -61,9 +61,18 @@ test('Agent 身份贯穿 Task 快照、列表、看板与定时计划', async ()
       agentId: string | null
       agentName: string | null
       recipeId: string
-      budgetUsd: number | null
     }[]
-    return tasks.find((item) => item.goal === taskGoal)
+    const summary = tasks.find((item) => item.goal === taskGoal)
+    if (!summary) return undefined
+    // 预算只存在于完整 TaskView：列表投影刻意不携带明细字段
+    return api.rpc({ method: 'getTask', taskId: summary.id }) as Promise<{
+      id: string
+      goal: string
+      agentId: string | null
+      agentName: string | null
+      recipeId: string
+      budgetUsd: number | null
+    }>
   }, goal)
   expect(task).toMatchObject({
     agentId,

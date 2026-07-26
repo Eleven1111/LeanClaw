@@ -1,7 +1,14 @@
 import { getDb } from './db'
 import { USER_STATUS_MAP } from '../shared/machine'
 import { parseRefineInstructions } from '../shared/verify'
-import type { InternalStatus, RunDetailView, TaskView } from '../shared/types'
+import type {
+  InternalStatus,
+  RunDetailView,
+  TaskSummaryDeliverable,
+  TaskSummaryView,
+  TaskView
+} from '../shared/types'
+import { buildTaskSummary } from '../shared/task-summary'
 import { publish } from './bus'
 import { getQueuePosition } from './scheduler'
 import { medianDurationMs } from '../shared/progress'
@@ -9,14 +16,9 @@ import {
   projectSafeRunEventPayload,
   redactTaskPrivatePaths
 } from '../shared/privacy'
-import {
-  buildStepDurationIndex,
-  queryRecipeStepDurations,
-  stepDurationsFor,
-  type StepDurationIndex
-} from './step-durations'
+import { queryRecipeStepDurations } from './step-durations'
 
-export function buildTaskView(taskId: string, stepDurations?: StepDurationIndex): TaskView {
+export function buildTaskView(taskId: string): TaskView {
   const db = getDb()
   const t = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId) as
     | {
@@ -65,9 +67,7 @@ export function buildTaskView(taskId: string, stepDurations?: StepDurationIndex)
   const evidence = db
     .prepare('SELECT * FROM evidence WHERE task_id = ? ORDER BY created_at')
     .all(taskId) as any[]
-  const durationsByStep = stepDurations
-    ? stepDurationsFor(stepDurations, t.recipe_id)
-    : queryRecipeStepDurations(t.recipe_id)
+  const durationsByStep = queryRecipeStepDurations(t.recipe_id)
   const mc = run
     ? (db
         .prepare(
@@ -183,12 +183,113 @@ export function buildTaskView(taskId: string, stepDurations?: StepDurationIndex)
   }
 }
 
-export function listTaskViews(): TaskView[] {
-  const ids = getDb()
-    .prepare('SELECT id FROM tasks ORDER BY created_at DESC')
-    .all() as { id: string }[]
-  const stepDurations = buildStepDurationIndex()
-  return ids.map((r) => buildTaskView(r.id, stepDurations))
+/**
+ * 列表投影：固定 5 条批量查询，与任务数无关。
+ * 不读取 Brief、输入路径、产物正文、Evidence、Approval、Andon 与事件计数——
+ * 列表页面一个都用不到，而它们正是完整 TaskView 的体积来源。
+ */
+export function listTaskSummaries(): TaskSummaryView[] {
+  const db = getDb()
+  const tasks = db
+    .prepare(
+      `SELECT t.id, t.goal, t.status, t.recipe_id AS recipeId,
+              t.project_id AS projectId, p.name AS projectName,
+              t.agent_id AS agentId, t.agent_name_snapshot AS agentName,
+              t.created_at AS createdAt, t.updated_at AS updatedAt
+       FROM tasks t LEFT JOIN projects p ON p.id = t.project_id
+       ORDER BY t.created_at DESC`
+    )
+    .all() as Array<{
+    id: string
+    goal: string
+    status: InternalStatus
+    recipeId: string
+    projectId: string | null
+    projectName: string | null
+    agentId: string | null
+    agentName: string | null
+    createdAt: string
+    updatedAt: string
+  }>
+  if (tasks.length === 0) return []
+
+  const latestRuns = db
+    .prepare(
+      `SELECT r.task_id AS taskId, r.id AS runId
+       FROM runs r
+       WHERE r.rowid = (
+         SELECT r2.rowid FROM runs r2 WHERE r2.task_id = r.task_id
+         ORDER BY r2.rowid DESC LIMIT 1
+       )`
+    )
+    .all() as Array<{ taskId: string; runId: string }>
+  const runByTask = new Map(latestRuns.map((row) => [row.taskId, row.runId]))
+  const latestRunIds = new Set(runByTask.values())
+
+  const steps = db
+    .prepare(
+      `SELECT run_id AS runId, status, title, output_summary AS outputSummary
+       FROM steps ORDER BY run_id, idx`
+    )
+    .all() as Array<{
+    runId: string
+    status: string
+    title: string
+    outputSummary: string | null
+  }>
+  const progressByRun = new Map<string, { running: string | null; lastDone: string | null }>()
+  for (const step of steps) {
+    if (!latestRunIds.has(step.runId)) continue
+    const entry = progressByRun.get(step.runId) ?? { running: null, lastDone: null }
+    if (step.status === 'running' && entry.running === null) entry.running = step.title
+    if (step.status === 'done') entry.lastDone = step.outputSummary ?? step.title
+    progressByRun.set(step.runId, entry)
+  }
+
+  const callCounts = db
+    .prepare(
+      `SELECT s.run_id AS runId,
+              SUM(CASE WHEN c.kind = 'model' THEN 1 ELSE 0 END) AS modelCalls,
+              SUM(CASE WHEN c.kind = 'tool' THEN 1 ELSE 0 END) AS toolCalls
+       FROM steps s
+       JOIN (
+         SELECT step_id, 'model' AS kind FROM model_calls
+         UNION ALL
+         SELECT step_id, 'tool' AS kind FROM tool_calls
+       ) c ON c.step_id = s.id
+       GROUP BY s.run_id`
+    )
+    .all() as Array<{ runId: string; modelCalls: number; toolCalls: number }>
+  const countsByRun = new Map(callCounts.map((row) => [row.runId, row]))
+
+  const deliverables = db
+    .prepare(
+      `SELECT task_id AS taskId, id, title, version
+       FROM artifacts WHERE is_deliverable = 1
+       ORDER BY created_at`
+    )
+    .all() as Array<TaskSummaryDeliverable & { taskId: string }>
+  const deliverablesByTask = new Map<string, TaskSummaryDeliverable[]>()
+  for (const item of deliverables) {
+    const values = deliverablesByTask.get(item.taskId) ?? []
+    values.push({ id: item.id, title: item.title, version: item.version })
+    deliverablesByTask.set(item.taskId, values)
+  }
+
+  return tasks.map((task) => {
+    const runId = runByTask.get(task.id)
+    const progress = runId ? progressByRun.get(runId) : undefined
+    const counts = runId ? countsByRun.get(runId) : undefined
+    return buildTaskSummary({
+      ...task,
+      queuePosition: getQueuePosition(task.id),
+      runningStepTitle: progress?.running ?? null,
+      lastDoneLabel: progress?.lastDone ?? null,
+      modelCalls: counts?.modelCalls ?? 0,
+      toolCalls: counts?.toolCalls ?? 0,
+      deliverables: deliverablesByTask.get(task.id) ?? []
+    })
+  })
 }
 
 export function publishTask(taskId: string): void {
