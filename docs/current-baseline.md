@@ -4,7 +4,7 @@
 >
 > 刷新日期：2026-07-29
 >
-> 已验证代码基线：`main@9af111f`（其后的本轮变更仅更新远端验收记录）
+> 已验证代码基线：`codex/t05-test-isolation@6a290f8`（PR #4 首轮 Required Checks 已通过）
 >
 > 维护规则：代码、Schema、测试门禁、打包方式或已知边界变化时，必须在同一任务内刷新本文
 
@@ -51,6 +51,7 @@
 | Need You | 从现有安全对象实时投影 | [`src/runtime/need-you.ts`](../src/runtime/need-you.ts#L35) |
 | 列表投影 | `TaskSummaryView`；固定 5 条批量查询，详情按需加载 | [`src/runtime/views.ts`](../src/runtime/views.ts#L186) |
 | 隐私 | Renderer 数据使用共享白名单和脱敏函数 | [`src/shared/privacy.ts`](../src/shared/privacy.ts) |
+| 测试隔离 | 自动测试在 import 前固定独立 test root/home/data/tmp；Main、Runtime、MCP 与文件/Shell 能力失败关闭 | [`docs/test-isolation.md`](./test-isolation.md)、[`src/runtime/test-isolation.ts`](../src/runtime/test-isolation.ts) |
 | 打包目标 | macOS arm64，目录包、DMG、ZIP | [`package.json`](../package.json#L8) |
 | 签名状态 | `identity: "-"`、`hardenedRuntime: false`，属于 ad-hoc 本机产物 | [`package.json`](../package.json#L65) |
 | 远端 CI | PR/main workflow 已实现；Node 24.18.0、macOS arm64、Quality 与 Electron E2E 分层 | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)、[`docs/ci.md`](./ci.md) |
@@ -64,10 +65,11 @@
 | 门禁 | 命令 | 结果 |
 |---|---|---|
 | TypeScript | `npm run typecheck` | PASS |
-| 静态治理 | `npm run check:static` | **4 个文件、18/18 PASS** |
-| 单元测试 | `npm test` | **39 个文件、349/349 PASS** |
+| 静态治理 | `npm run check:static` | **5 个文件、22/22 PASS** |
+| 单元测试 | `npm test` | **40 个文件、357/357 PASS** |
 | Production build | `npm run build` | PASS |
-| Electron E2E | `npm run e2e` | 沙箱内因 GUI/localhost 权限 43/43 启动失败；受控 GUI 权限下原样重跑 **43/43 PASS** |
+| Runtime smoke | `npm run smoke` | 独立临时根内 `delivered`，退出后无残留 |
+| Electron E2E | `npm run e2e` | 受控 GUI 权限下 **44/44 PASS** |
 | 干净安装预演 | 临时副本执行 `npm ci`，随后 static/typecheck/unit/build | Node 23.6.0 arm64 下 PASS；不替代远端 Node 24.18.0 Runner |
 
 ### 4.2 最近一次仓库完整证据
@@ -90,6 +92,8 @@
 - 545–690ms 的完整首屏测量主要包含 Electron 冷启动；
 - 启动预热和 Renderer 延迟加载尚未专项评估；
 - TaskSummary 的 SQL 批量投影与完整 Task push 派生共用构造入口，但尚无逐字节对拍测试。
+
+自动测试隔离已在 T05 实现并通过本地完整回归；[PR #4 run 30455889598](https://github.com/Eleven1111/LeanClaw/actions/runs/30455889598) 又在 Node 24.18.0 / macOS 15 arm64 上通过 `Quality` 与 `Electron E2E`。T05 已关闭，执行指针移到 T06。
 
 性能数字是指定夹具和机器上的样本，不是所有机器的 SLA。任何后续优化必须先复现、归因，再设门槛。
 

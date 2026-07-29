@@ -19,7 +19,7 @@
 
 | Plan ID | 计划 | 当前阶段/任务 | 工程状态 | 用户状态 |
 |---|---|---|---|---|
-| `leanclaw-codepilot-optimization` | [CodePilot 借鉴分析与 LeanClaw 优化提升执行方案](./active/CodePilot借鉴分析与LeanClaw优化执行方案.md) | P1 / T05 | T04 已关闭；T05 开始 | P0 已验收；CP1 尚未验收 |
+| `leanclaw-codepilot-optimization` | [CodePilot 借鉴分析与 LeanClaw 优化提升执行方案](./active/CodePilot借鉴分析与LeanClaw优化执行方案.md) | P1 / T06 | T05 已关闭；T06 可领取 | P0 已验收；CP1 尚未验收 |
 
 ## 3. 领取前检查
 

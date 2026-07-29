@@ -87,6 +87,10 @@ import {
   createDiagnosticArchive,
   diagnosticArchiveName
 } from './diagnostics'
+import {
+  assertPathWithinTestRoot,
+  assertTestIsolationEnvironment
+} from '../runtime/test-isolation'
 
 const GLOBAL_SHORTCUT = 'Alt+Space'
 
@@ -95,9 +99,11 @@ function appIconPath(): string {
   return candidates.find((candidate) => existsSync(candidate)) ?? candidates[0]
 }
 
+assertTestIsolationEnvironment()
 if (process.env.LEANCLAW_DATA_DIR) {
   app.setPath('userData', process.env.LEANCLAW_DATA_DIR)
 }
+assertPathWithinTestRoot(app.getPath('userData'), 'Electron userData')
 
 const logsDir = join(app.getPath('userData'), 'logs')
 const runtimeUsageCachePath = join(app.getPath('userData'), 'runtime-overview-usage.json')
@@ -537,6 +543,7 @@ void app.whenReady().then(() => {
       filters: [{ name: 'Markdown', extensions: ['md'] }]
     })
     if (result.canceled || !result.filePath) return { cancelled: true }
+    assertPathWithinTestRoot(result.filePath, 'Markdown 导出路径')
     await writeFile(result.filePath, detail.content, 'utf8')
     return { cancelled: false }
   })
@@ -547,6 +554,7 @@ void app.whenReady().then(() => {
       filters: [{ name: 'PDF', extensions: ['pdf'] }]
     })
     if (result.canceled || !result.filePath) return { cancelled: true }
+    assertPathWithinTestRoot(result.filePath, 'PDF 导出路径')
     const pdf = await event.sender.printToPDF({ printBackground: true, pageSize: 'A4' })
     await writeFile(result.filePath, pdf)
     return { cancelled: false }
@@ -561,6 +569,7 @@ void app.whenReady().then(() => {
       filters: [{ name: 'ZIP Archive', extensions: ['zip'] }]
     })
     if (result.canceled || !result.filePath) return { cancelled: true }
+    assertPathWithinTestRoot(result.filePath, '诊断导出路径')
     logMain('diagnostics-exported')
     await createDiagnosticArchive({
       logsDir,

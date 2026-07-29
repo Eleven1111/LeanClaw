@@ -6,12 +6,14 @@ import { webFetchTool, webSearchTool } from './tools-web'
 import { shellRunTool } from './tools-shell'
 import { ToolError, type ToolContext, type ToolDefinition, type ToolResult } from './tool-types'
 import { extractPdfText, extractXlsxText } from './document-files'
+import { isPathAllowed } from './test-isolation'
 
 export { ToolError, type ToolContext, type ToolDefinition, type ToolResult }
 
-function inAllowedDirs(p: string, dirs: string[]): boolean {
-  const rp = resolve(p)
-  return dirs.some((d) => rp === resolve(d) || rp.startsWith(resolve(d) + '/'))
+function assertAllowedPath(path: string, ctx: ToolContext): void {
+  if (!isPathAllowed(path, ctx.allowedDirs)) {
+    throw new ToolError(`目标路径不在允许目录内: ${path}`, false)
+  }
 }
 
 const readFileTool: ToolDefinition = {
@@ -21,9 +23,12 @@ const readFileTool: ToolDefinition = {
   provider: 'builtin',
   description: '读取一个本地文本文件的完整内容',
   baseRisk: 'low',
-  riskFor: () => 'low',
-  async execute(input) {
+  riskFor(input, ctx) {
+    return isPathAllowed(String(input.path ?? ''), ctx.allowedDirs) ? 'low' : 'forbidden'
+  },
+  async execute(input, ctx) {
     const path = String(input.path ?? '')
+    assertAllowedPath(path, ctx)
     if (!existsSync(path)) throw new ToolError(`输入文件不存在: ${path}`, false)
     const lower = path.toLowerCase()
     const raw = lower.endsWith('.pdf') || lower.endsWith('.xlsx') ? '' : readFileSync(path, 'utf8')
@@ -74,10 +79,11 @@ const listDirTool: ToolDefinition = {
   description: '列出允许目录的一层文件与子目录，只读动作',
   baseRisk: 'low',
   riskFor(input, ctx) {
-    return inAllowedDirs(String(input.path ?? ''), ctx.allowedDirs) ? 'low' : 'forbidden'
+    return isPathAllowed(String(input.path ?? ''), ctx.allowedDirs) ? 'low' : 'forbidden'
   },
-  async execute(input) {
+  async execute(input, ctx) {
     const path = String(input.path ?? '')
+    assertAllowedPath(path, ctx)
     if (!existsSync(path) || !statSync(path).isDirectory()) throw new ToolError(`目录不存在: ${path}`, false)
     const entries = readdirSync(path).sort().map((name) => ({
       name,
@@ -96,7 +102,7 @@ const writeFileTool: ToolDefinition = {
   baseRisk: 'approval_required',
   riskFor(input, ctx) {
     const path = String(input.path ?? '')
-    return inAllowedDirs(path, ctx.allowedDirs) ? 'approval_required' : 'forbidden'
+    return isPathAllowed(path, ctx.allowedDirs) ? 'approval_required' : 'forbidden'
   },
   dryRun(input) {
     const path = String(input.path ?? '')
@@ -104,11 +110,12 @@ const writeFileTool: ToolDefinition = {
     const before = existsSync(path) ? readFileSync(path, 'utf8') : ''
     return { summary: `将写入 ${path}`, data: { diff: unifiedDiff(before, content, path) } }
   },
-  async execute(input) {
+  async execute(input, ctx) {
     if (process.env.LEANCLAW_FAULT === 'tool_fail') {
       throw new ToolError('模拟工具故障（LEANCLAW_FAULT=tool_fail）', true)
     }
     const path = String(input.path ?? '')
+    assertAllowedPath(path, ctx)
     const content = String(input.content ?? '')
     const hash = createHash('sha256').update(content).digest('hex')
     if (existsSync(path)) {

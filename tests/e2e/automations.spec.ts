@@ -6,6 +6,14 @@ import { closeApp, launchApp, type LaunchedApp } from './helpers'
 
 let launched: LaunchedApp | undefined
 
+function sqlite(dbPath: string, sql: string): string {
+  return execFileSync(
+    '/usr/bin/sqlite3',
+    ['-cmd', '.timeout 5000', dbPath, sql],
+    { encoding: 'utf8' }
+  ).trim()
+}
+
 function watchRendererErrors(window: LaunchedApp['window']): string[] {
   const errors: string[] = []
   window.on('console', (message) => {
@@ -105,14 +113,14 @@ test('Automation：立即运行、五次历史、Agent 互锁与删除保留 Tas
     await card.getByRole('button', { name: '立即运行' }).click()
     await expect(card.getByRole('status')).toContainText('已创建任务')
   }
-  execFileSync('/usr/bin/sqlite3', [
+  sqlite(
     join(dataDir, 'leanclaw.db'),
     `UPDATE tasks SET created_at = '2030-01-01T00:00:00.000Z' WHERE schedule_id = '${setup.scheduleId}';`
-  ])
-  const expectedHistoryIds = execFileSync('/usr/bin/sqlite3', [
+  )
+  const expectedHistoryIds = sqlite(
     join(dataDir, 'leanclaw.db'),
     `SELECT id FROM tasks WHERE schedule_id = '${setup.scheduleId}' ORDER BY rowid DESC LIMIT 5;`
-  ], { encoding: 'utf8' }).trim().split('\n')
+  ).split('\n')
   const afterTrigger = await window.evaluate(async (scheduleId) => {
     const api = (globalThis as unknown as {
       api: { rpc(request: unknown): Promise<unknown> }
@@ -137,14 +145,14 @@ test('Automation：立即运行、五次历史、Agent 互锁与删除保留 Tas
   expect(afterTrigger.history.every((item) => item.triggerSource === 'manual')).toBe(true)
 
   const firstTaskId = afterTrigger.history[0].taskId
-  execFileSync('/usr/bin/sqlite3', [
+  sqlite(
     join(dataDir, 'leanclaw.db'),
     `INSERT INTO artifacts
       (id, task_id, run_id, step_id, type, title, version, is_deliverable, created_at)
      VALUES
       ('automation-deliverable', '${firstTaskId}', 'history-run', 'history-step',
        'final', '自动化成品', 3, 1, '2030-01-01T00:00:01.000Z');`
-  ])
+  )
   await card.getByRole('button', { name: '最近运行' }).click()
   const historyRows = card.locator('.automation-history-row')
   await expect(historyRows).toHaveCount(5)
@@ -167,10 +175,10 @@ test('Automation：立即运行、五次历史、Agent 互锁与删除保留 Tas
 
   await card.getByRole('button', { name: '删除' }).click()
   await expect(card).toHaveCount(0)
-  const taskRow = execFileSync('/usr/bin/sqlite3', [
+  const taskRow = sqlite(
     join(dataDir, 'leanclaw.db'),
     `SELECT schedule_id || '|' || schedule_trigger_source FROM tasks WHERE id = '${firstTaskId}';`
-  ], { encoding: 'utf8' }).trim()
+  )
   expect(taskRow).toBe(`${setup.scheduleId}|manual`)
   expect(rendererErrors).toEqual([])
 })

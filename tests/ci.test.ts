@@ -31,7 +31,7 @@ describe('remote CI contract', () => {
 
   it('fails the quality job on install, governance, type, unit, or build errors', () => {
     expect(packageJson.scripts['check:static']).toBe(
-      'vitest run tests/ci.test.ts tests/governance.test.ts tests/packaging.test.ts tests/document-files.test.ts'
+      'vitest run tests/ci.test.ts tests/governance.test.ts tests/packaging.test.ts tests/document-files.test.ts tests/test-isolation.test.ts'
     )
     expect(workflow.match(/run: npm ci --no-audit --no-fund --foreground-scripts/g)).toHaveLength(2)
     for (const command of ['npm run check:static', 'npm run typecheck', 'npm test', 'npm run build']) {

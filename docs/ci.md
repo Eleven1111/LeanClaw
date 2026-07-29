@@ -25,7 +25,7 @@ Checkout 关闭 `persist-credentials`；GitHub 官方 Action 使用审核过的�
 | Job / Check | Runner | 上限 | 命令 | 证明范围 |
 |---|---|---:|---|---|
 | `Quality` | `macos-15` arm64 | 20 分钟 | 锁文件安装、`npm run check:static`、`npm run typecheck`、`npm test`、`npm run build` | 锁文件安装、治理契约、类型、单元测试、开发态 production build |
-| `Electron E2E` | `macos-15` arm64 | 30 分钟 | 锁文件安装、`npm run build`、`npm run e2e` | 开发态 Electron 的 43 条 E2E；依赖 Quality 成功 |
+| `Electron E2E` | `macos-15` arm64 | 30 分钟 | 锁文件安装、`npm run build`、`npm run e2e` | 开发态 Electron 的 44 条 E2E；依赖 Quality 成功 |
 
 实际 check-run 名称已核对为 `Quality` 和 `Electron E2E`，二者均已设为 `main` 的严格 Required Status Check。Branch Protection 同时启用管理员约束、线性历史和会话解决要求，并禁止强推与删除。
 
@@ -52,12 +52,14 @@ Checkout 关闭 `persist-credentials`；GitHub 官方 Action 使用审核过的�
 - 数据治理与列表窗口契约；
 - macOS 打包配置契约；
 - PDF/XLSX 文档解析契约。
+- 自动测试入口、隔离根和失败关闭路径契约。
 
 它不是 ESLint 的替代品，也不应被描述为完整代码风格检查。若后续需要引入 lint，必须单独评估依赖、规则、存量告警和渐进启用方式。
 
 ## 5. E2E、Smoke 与打包边界
 
-- Electron E2E 使用 `tests/e2e/helpers.ts` 创建临时 `LEANCLAW_DATA_DIR`，不应访问真实 `~/.leanclaw`；
+- Vitest 和 Playwright 在测试模块 import 前创建独立 test root/home/data/tmp；Electron E2E 的共享 launcher 禁止场景覆盖四个隔离变量；
+- Main、Runtime、MCP 子进程、文件工具、Shell cwd 与测试导出路径都受测试根硬边界保护，详见 [`test-isolation.md`](./test-isolation.md)；
 - CI 设置 Playwright `forbidOnly` 且不重试，误提交 `test.only` 或首次失败不会被静默掩盖；
 - 本 job 启动的是 `out/main/index.js`，因此只能证明开发态 Electron；
 - `npm run build` 只生成 production bundle，不生成 `.app`、DMG 或 ZIP；
@@ -90,6 +92,8 @@ npm run e2e
 3. [临时 Draft PR #1](https://github.com/Eleven1111/LeanClaw/pull/1) 注入一条确定性失败后，[run 30431694467](https://github.com/Eleven1111/LeanClaw/actions/runs/30431694467) 的 Quality 在 56s 后失败，依赖的 Electron E2E 被跳过；PR 已关闭，远端和本地临时分支均已删除；
 4. 首轮真实 Runner 还暴露了 BrowserWindow 早于 Utility Runtime 数据库迁移完成的测试竞态；共享 E2E launcher 改为等待成功的 `listTasks` RPC，相关 9/9 与完整 43/43 本地 E2E 均通过，第二轮远端也通过；
 5. 用户将仓库改为 public 后，为 `main` 启用严格 Branch Protection。临时 [PR #2](https://github.com/Eleven1111/LeanClaw/pull/2) 的 [run 30432810726](https://github.com/Eleven1111/LeanClaw/actions/runs/30432810726) 中 Quality 失败、Electron E2E 跳过，GitHub 返回 `mergeStateStatus=BLOCKED`。PR、远端分支和本地工作树随后全部清理。
+6. [T05 PR #4](https://github.com/Eleven1111/LeanClaw/pull/4) 的首轮 [run 30455889598](https://github.com/Eleven1111/LeanClaw/actions/runs/30455889598) 通过：Quality 1m24s、Electron E2E 4m18s，远端验证覆盖 357/357 unit 与 44/44 Electron E2E。
+7. 收口文档提交触发的 [run 30456463885](https://github.com/Eleven1111/LeanClaw/actions/runs/30456463885) 中 Quality 通过，但 Automation E2E 的系统 `sqlite3` 夹具与 Runtime 并发写测试库时立即收到 `database is locked`；其余 43 条通过。该 CLI 默认 busy timeout 为 0，现为此并发夹具设置 5 秒 timeout，定向场景连续 5/5 通过；最终 PR HEAD 仍须完整重跑。
 
 T04 的代码、真实 Runner、失败关闭和平台级合并阻断证据均已完整。
 

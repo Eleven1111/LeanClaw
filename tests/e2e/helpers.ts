@@ -2,6 +2,10 @@ import { mkdtempSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { _electron as electron, type ElectronApplication, type Page } from '@playwright/test'
+import {
+  assertPathWithinTestRoot,
+  assertTestIsolationEnvironment
+} from '../../src/runtime/test-isolation'
 
 export interface LaunchedApp {
   app: ElectronApplication
@@ -37,15 +41,20 @@ export async function launchApp(
   env: Record<string, string> = {},
   existingDataDir?: string
 ): Promise<LaunchedApp> {
+  assertTestIsolationEnvironment()
   const dataDir = existingDataDir ?? mkdtempSync(join(tmpdir(), 'leanclaw-e2e-'))
+  assertPathWithinTestRoot(dataDir, 'E2E data dir')
   const app = await electron.launch({
     args: [join(process.cwd(), 'out/main/index.js')],
     env: {
       ...(process.env as Record<string, string>),
-      LEANCLAW_DATA_DIR: dataDir,
       ANTHROPIC_API_KEY: '',
       LEANCLAW_WEB_MOCK: '1',
-      ...env
+      ...env,
+      LEANCLAW_TEST_ROOT: process.env.LEANCLAW_TEST_ROOT as string,
+      LEANCLAW_DATA_DIR: dataDir,
+      HOME: process.env.HOME as string,
+      TMPDIR: process.env.TMPDIR as string
     }
   })
   const window = await app.firstWindow()

@@ -21,6 +21,10 @@ import { syncMcpFromConfig } from './mcp'
 import type { RpcRequest } from '../shared/types'
 import { startScheduleLoop } from './schedules'
 import { appendDiagnosticEvent } from '../main/diagnostics'
+import {
+  assertPathWithinTestRoot,
+  assertTestIsolationEnvironment
+} from './test-isolation'
 
 type ParentMessage =
   | { id: number; req: RpcRequest; kind?: undefined }
@@ -45,7 +49,9 @@ interface ParentPort {
   postMessage(message: unknown): void
 }
 
+assertTestIsolationEnvironment()
 const dataDir = process.env.LEANCLAW_DATA_DIR || join(homedir(), '.leanclaw')
+assertPathWithinTestRoot(dataDir, 'Runtime data dir')
 const runtimePrivateRoots = [dataDir, homedir()]
 const logRuntime = (event: string, options: { level?: 'info' | 'error'; code?: string | number; error?: unknown } = {}): void => {
   try {
