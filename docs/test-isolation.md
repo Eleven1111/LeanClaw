@@ -55,7 +55,7 @@ npm run e2e
 - 越界读取/列目录/写入、符号链接逃逸、过宽 `allowedDirs`、测试变量覆盖均有反证用例；
 - 验证结束后未发现 `leanclaw-vitest-*`、`leanclaw-playwright-*`、`leanclaw-runtime-smoke-*` 或 sentinel 临时目录残留。
 
-远端证据：[PR #4 首轮 run 30455889598](https://github.com/Eleven1111/LeanClaw/actions/runs/30455889598) 在 Node 24.18.0 / macOS 15 arm64 上通过，`Quality` 1m24s、`Electron E2E` 4m18s。最终文档 HEAD 仍须再次通过同一组 Required Checks 才能合并。
+远端证据：[PR #4 最终 run 30457091843](https://github.com/Eleven1111/LeanClaw/actions/runs/30457091843) 在 Node 24.18.0 / macOS 15 arm64 上通过，`Quality` 47s、`Electron E2E` 3m08s；squash merge 后，[`main` run 30457521961](https://github.com/Eleven1111/LeanClaw/actions/runs/30457521961) 再次通过，`Quality` 1m03s、`Electron E2E` 3m19s。
 
 ## 5. 明确边界
 

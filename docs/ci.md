@@ -94,6 +94,7 @@ npm run e2e
 5. 用户将仓库改为 public 后，为 `main` 启用严格 Branch Protection。临时 [PR #2](https://github.com/Eleven1111/LeanClaw/pull/2) 的 [run 30432810726](https://github.com/Eleven1111/LeanClaw/actions/runs/30432810726) 中 Quality 失败、Electron E2E 跳过，GitHub 返回 `mergeStateStatus=BLOCKED`。PR、远端分支和本地工作树随后全部清理。
 6. [T05 PR #4](https://github.com/Eleven1111/LeanClaw/pull/4) 的首轮 [run 30455889598](https://github.com/Eleven1111/LeanClaw/actions/runs/30455889598) 通过：Quality 1m24s、Electron E2E 4m18s，远端验证覆盖 357/357 unit 与 44/44 Electron E2E。
 7. 收口文档提交触发的 [run 30456463885](https://github.com/Eleven1111/LeanClaw/actions/runs/30456463885) 中 Quality 通过，但 Automation E2E 的系统 `sqlite3` 夹具与 Runtime 并发写测试库时立即收到 `database is locked`；其余 43 条通过。该 CLI 默认 busy timeout 为 0，现为此并发夹具设置 5 秒 timeout，定向场景连续 5/5 通过；最终 PR HEAD 仍须完整重跑。
+8. 修复后的 [PR #4 最终 run 30457091843](https://github.com/Eleven1111/LeanClaw/actions/runs/30457091843) 通过：Quality 47s、Electron E2E 3m08s。PR squash merge 为 `main@1bd9722` 后，[push run 30457521961](https://github.com/Eleven1111/LeanClaw/actions/runs/30457521961) 再次通过：Quality 1m03s、Electron E2E 3m19s。
 
 T04 的代码、真实 Runner、失败关闭和平台级合并阻断证据均已完整。
 
