@@ -4,14 +4,14 @@ status: active
 created_at: 2026-07-29
 updated_at: 2026-07-29
 current_phase: P1
-current_task: T05
+current_task: T06
 engineering_status: in_progress
 user_approval: approved
 ---
 
 # CodePilot 借鉴分析与 LeanClaw 优化提升执行方案
 
-> 文档状态：P0 已于 2026-07-29 通过用户验收；P1 / T04 已完成并关闭，执行指针移到 T05
+> 文档状态：P0 已于 2026-07-29 通过用户验收；P1 / T04–T05 已完成并关闭，执行指针移到 T06
 >
 > 创建日期：2026-07-29
 >
@@ -307,7 +307,7 @@ flowchart LR
 
 T04 已完成并关闭：[`ci.yml`](../../../.github/workflows/ci.yml)、[`docs/ci.md`](../../ci.md)、Node LTS 固定、静态治理与 fail-closed 测试均已落盘；本地干净安装、349/349 unit、build 和 43/43 Electron E2E 已通过。仓库已公开并为 `main` 启用严格 Branch Protection：`Quality` 与 `Electron E2E` 都是 Required Check，管理员同样受约束，禁止强推和删除。临时 PR #2 的确定性失败使 Quality 失败、Electron E2E 跳过，GitHub 返回 `mergeStateStatus=BLOCKED`；证据取得后 PR 和分支均已清理。执行指针移到 T05。
 
-T05 本地实现完成，尚未关闭：Vitest、Playwright 和 Runtime smoke 会在 import/启动前创建独立 test root/home/data/tmp；Main、Utility Runtime、MCP 子进程、文件工具、Shell cwd 与导出路径均加入测试根硬边界。越界、符号链接逃逸、过宽 `allowedDirs` 和场景覆盖隔离变量都有失败反证。本地 static 22/22、typecheck、357/357 unit、build、Runtime smoke 与 44/44 Electron E2E 通过，临时根无残留。详细契约见 [`docs/test-isolation.md`](../../test-isolation.md)；T05 要等 PR 的 `Quality` 与 `Electron E2E` Required Checks 通过后才能关闭并把指针移到 T06。
+T05 已完成并关闭：Vitest、Playwright 和 Runtime smoke 会在 import/启动前创建独立 test root/home/data/tmp；Main、Utility Runtime、MCP 子进程、文件工具、Shell cwd 与导出路径均加入测试根硬边界。越界、符号链接逃逸、过宽 `allowedDirs` 和场景覆盖隔离变量都有失败反证。本地 static 22/22、typecheck、357/357 unit、build、Runtime smoke 与 44/44 Electron E2E 通过，临时根无残留；[PR #4 首轮 run 30455889598](https://github.com/Eleven1111/LeanClaw/actions/runs/30455889598) 的 `Quality`（1m24s）与 `Electron E2E`（4m18s）也通过。详细契约见 [`docs/test-isolation.md`](../../test-isolation.md)。执行指针移到 T06，T08 的最终 `.app`/CDP 验证不前移。
 
 #### CP1：工程门禁
 

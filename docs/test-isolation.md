@@ -1,6 +1,6 @@
 # LeanClaw 自动测试隔离契约
 
-> 状态：T05 本地实现与验证完成；远端 Required Checks 待 PR 验证
+> 状态：T05 已完成并关闭
 >
 > 生效日期：2026-07-29
 
@@ -54,6 +54,8 @@ npm run e2e
 - Electron E2E：44/44；
 - 越界读取/列目录/写入、符号链接逃逸、过宽 `allowedDirs`、测试变量覆盖均有反证用例；
 - 验证结束后未发现 `leanclaw-vitest-*`、`leanclaw-playwright-*`、`leanclaw-runtime-smoke-*` 或 sentinel 临时目录残留。
+
+远端证据：[PR #4 首轮 run 30455889598](https://github.com/Eleven1111/LeanClaw/actions/runs/30455889598) 在 Node 24.18.0 / macOS 15 arm64 上通过，`Quality` 1m24s、`Electron E2E` 4m18s。最终文档 HEAD 仍须再次通过同一组 Required Checks 才能合并。
 
 ## 5. 明确边界
 

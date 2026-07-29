@@ -92,6 +92,7 @@ npm run e2e
 3. [临时 Draft PR #1](https://github.com/Eleven1111/LeanClaw/pull/1) 注入一条确定性失败后，[run 30431694467](https://github.com/Eleven1111/LeanClaw/actions/runs/30431694467) 的 Quality 在 56s 后失败，依赖的 Electron E2E 被跳过；PR 已关闭，远端和本地临时分支均已删除；
 4. 首轮真实 Runner 还暴露了 BrowserWindow 早于 Utility Runtime 数据库迁移完成的测试竞态；共享 E2E launcher 改为等待成功的 `listTasks` RPC，相关 9/9 与完整 43/43 本地 E2E 均通过，第二轮远端也通过；
 5. 用户将仓库改为 public 后，为 `main` 启用严格 Branch Protection。临时 [PR #2](https://github.com/Eleven1111/LeanClaw/pull/2) 的 [run 30432810726](https://github.com/Eleven1111/LeanClaw/actions/runs/30432810726) 中 Quality 失败、Electron E2E 跳过，GitHub 返回 `mergeStateStatus=BLOCKED`。PR、远端分支和本地工作树随后全部清理。
+6. [T05 PR #4](https://github.com/Eleven1111/LeanClaw/pull/4) 的首轮 [run 30455889598](https://github.com/Eleven1111/LeanClaw/actions/runs/30455889598) 通过：Quality 1m24s、Electron E2E 4m18s，远端验证覆盖 357/357 unit 与 44/44 Electron E2E。
 
 T04 的代码、真实 Runner、失败关闭和平台级合并阻断证据均已完整。
 
