@@ -97,7 +97,6 @@
 
 | 优先级 | 缺口 | 当前边界 |
 |---:|---|---|
-| P0 | PR/main CI、本地等价检查、托管 Runner 绿灯和故意失败 PR 均已有证据；当前私有个人仓库无法启用 Branch Protection / Ruleset | GitHub API 返回需升级 Pro 或改为 public；在此之前不能声称失败检查会阻止直接合并 |
 | P0 | v8 迁移 fixture 由历史列定义重建 | 不证明未知手工索引、约束或真实数据组合兼容 |
 | P0 | Automation DB 级故障未在真实 Runtime 内注入验证 | 已修复进程崩溃，但“认领先推进、失败不回滚”仍是既有语义 |
 | P0 | TaskSummary 两条派生路径无逐字节对拍 | 当前由单一构造入口、单测和 E2E 间接保护 |

@@ -1,6 +1,6 @@
 # LeanClaw 远端 CI 基线
 
-> 状态：workflow、本地等价验证、真实托管 Runner 与故意失败 PR 均已有证据；私有仓库的 Required Check 强制执行受 GitHub 账号套餐限制
+> 状态：workflow、本地等价验证、真实托管 Runner、故意失败 PR 与 Required Check 阻断均已有证据
 >
 > 建立日期：2026-07-29
 >
@@ -18,7 +18,7 @@ Workflow 只授予 `contents: read`，不读取 Repository Secret，不发布产
 
 Checkout 关闭 `persist-credentials`；GitHub 官方 Action 使用审核过的完整 commit SHA 固定，避免可变 major tag 带来的供应链漂移。
 
-2026-07-29 已创建私有仓库 [`Eleven1111/LeanClaw`](https://github.com/Eleven1111/LeanClaw)，并将其配置为本地 `origin`。当前 `main` 的真实 CI 已通过；临时 Draft PR #1 也已证明 Quality 会失败关闭并跳过依赖的 Electron E2E。
+2026-07-29 已创建 [`Eleven1111/LeanClaw`](https://github.com/Eleven1111/LeanClaw) 并配置为本地 `origin`；仓库随后由用户手工改为 public。当前 `main` 的真实 CI 已通过，Branch Protection 与失败 PR 阻断也已验证。
 
 ## 2. 必要门禁
 
@@ -27,7 +27,7 @@ Checkout 关闭 `persist-credentials`；GitHub 官方 Action 使用审核过的�
 | `Quality` | `macos-15` arm64 | 20 分钟 | 锁文件安装、`npm run check:static`、`npm run typecheck`、`npm test`、`npm run build` | 锁文件安装、治理契约、类型、单元测试、开发态 production build |
 | `Electron E2E` | `macos-15` arm64 | 30 分钟 | 锁文件安装、`npm run build`、`npm run e2e` | 开发态 Electron 的 43 条 E2E；依赖 Quality 成功 |
 
-实际 check-run 名称已核对为 `Quality` 和 `Electron E2E`。应将二者设为 `main` 的 Required Status Check，但 GitHub REST API 对当前私有个人仓库返回 HTTP 403：需要升级 GitHub Pro 或将仓库改为 public 才能启用 Branch Protection / Repository Ruleset。仓库保持 private；在账号能力改变前，只能证明 CI 失败关闭，不能证明 GitHub 会禁止绕过失败检查直接合并。
+实际 check-run 名称已核对为 `Quality` 和 `Electron E2E`，二者均已设为 `main` 的严格 Required Status Check。Branch Protection 同时启用管理员约束、线性历史和会话解决要求，并禁止强推与删除。
 
 ## 3. 版本与可复现性
 
@@ -88,9 +88,10 @@ npm run e2e
 1. [`main@9af111f` 的 CI run 30431282718](https://github.com/Eleven1111/LeanClaw/actions/runs/30431282718) 成功：Quality 1m06s、Electron E2E 3m09s；
 2. 日志确认 `macos-15-arm64`、Node `v24.18.0`、锁文件安装、349/349 unit 与 43/43 Electron E2E；
 3. [临时 Draft PR #1](https://github.com/Eleven1111/LeanClaw/pull/1) 注入一条确定性失败后，[run 30431694467](https://github.com/Eleven1111/LeanClaw/actions/runs/30431694467) 的 Quality 在 56s 后失败，依赖的 Electron E2E 被跳过；PR 已关闭，远端和本地临时分支均已删除；
-4. 首轮真实 Runner 还暴露了 BrowserWindow 早于 Utility Runtime 数据库迁移完成的测试竞态；共享 E2E launcher 改为等待成功的 `listTasks` RPC，相关 9/9 与完整 43/43 本地 E2E 均通过，第二轮远端也通过。
+4. 首轮真实 Runner 还暴露了 BrowserWindow 早于 Utility Runtime 数据库迁移完成的测试竞态；共享 E2E launcher 改为等待成功的 `listTasks` RPC，相关 9/9 与完整 43/43 本地 E2E 均通过，第二轮远端也通过；
+5. 用户将仓库改为 public 后，为 `main` 启用严格 Branch Protection。临时 [PR #2](https://github.com/Eleven1111/LeanClaw/pull/2) 的 [run 30432810726](https://github.com/Eleven1111/LeanClaw/actions/runs/30432810726) 中 Quality 失败、Electron E2E 跳过，GitHub 返回 `mergeStateStatus=BLOCKED`。PR、远端分支和本地工作树随后全部清理。
 
-尚未满足的是 Required Status Check 的平台级强制执行。T04 的代码与 Runner 证据完整，但在仓库保持 private 且账号套餐不变时，不能关闭这项外部门禁，也不能声称失败检查会阻止有写权限的人直接合并。
+T04 的代码、真实 Runner、失败关闭和平台级合并阻断证据均已完整。
 
 本轮还在隔离副本临时注入 `test.only`，`CI=true npx playwright test --list` 按预期以退出码 1 拒绝执行；移除临时文件后恢复识别 29 个文件、43 条测试。这证明本地 fail-closed 配置有效，但不证明 GitHub 分支保护会拦截。
 
@@ -104,3 +105,4 @@ npm run e2e
 | 2026-07-29 | 不在 T04 运行 packaged smoke | 最终产物验证属于 T08；开发态 E2E 不能冒充最终 `.app` 证据。 |
 | 2026-07-29 | GitHub 官方 Action 固定完整 SHA | 降低可变 tag 被移动后改变 CI 执行代码的供应链风险。 |
 | 2026-07-29 | 仓库保持 private，不为启用免费 Branch Protection 自动改为 public | 可见性是用户数据边界；应由用户明确选择公开或升级账号。 |
+| 2026-07-29 | 用户手工改为 public 后启用严格 `main` 保护 | Required Checks 现在具有真实合并阻断力；管理员也不能绕过。 |
