@@ -1,11 +1,31 @@
 import { _electron as electron, chromium, expect } from '@playwright/test'
+import { mkdirSync } from 'fs'
+import { isAbsolute, relative, resolve, sep } from 'path'
 
 const executablePath = process.env.LEANCLAW_PACKAGED_APP
 const dataDir = process.env.LEANCLAW_PACKAGED_DATA_DIR
 const cdpUrl = process.env.LEANCLAW_PACKAGED_CDP_URL
-if (!cdpUrl && (!executablePath || !dataDir)) {
-  throw new Error('必须提供 CDP URL，或同时提供 packaged app 与 data dir')
+if (!dataDir || (!cdpUrl && !executablePath)) {
+  throw new Error('必须提供 packaged data dir，以及 CDP URL 或 packaged app')
 }
+
+const testRoot = process.env.LEANCLAW_TEST_ROOT ?? dataDir
+const inside = relative(resolve(testRoot), resolve(dataDir))
+if (inside === '..' || inside.startsWith(`..${sep}`) || isAbsolute(inside)) {
+  throw new Error('packaged data dir 必须位于 LEANCLAW_TEST_ROOT 内')
+}
+const home = process.env.HOME && process.env.LEANCLAW_TEST_ROOT
+  ? process.env.HOME
+  : resolve(testRoot, 'home')
+const temp = process.env.TMPDIR && process.env.LEANCLAW_TEST_ROOT
+  ? process.env.TMPDIR
+  : resolve(testRoot, 'tmp')
+mkdirSync(home, { recursive: true })
+mkdirSync(temp, { recursive: true })
+process.env.LEANCLAW_TEST_ROOT = testRoot
+process.env.LEANCLAW_DATA_DIR = dataDir
+process.env.HOME = home
+process.env.TMPDIR = temp
 
 const browser = cdpUrl ? await chromium.connectOverCDP(cdpUrl) : null
 const app = cdpUrl
@@ -14,7 +34,10 @@ const app = cdpUrl
       executablePath,
       env: {
         ...process.env,
+        LEANCLAW_TEST_ROOT: testRoot,
         LEANCLAW_DATA_DIR: dataDir,
+        HOME: home,
+        TMPDIR: temp,
         ANTHROPIC_API_KEY: '',
         LEANCLAW_WEB_MOCK: '1'
       }

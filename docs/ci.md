@@ -25,7 +25,7 @@ Checkout 关闭 `persist-credentials`；GitHub 官方 Action 使用审核过的�
 | Job / Check | Runner | 上限 | 命令 | 证明范围 |
 |---|---|---:|---|---|
 | `Quality` | `macos-15` arm64 | 20 分钟 | 锁文件安装、`npm run check:static`、`npm run typecheck`、`npm test`、`npm run build` | 锁文件安装、治理契约、类型、单元测试、开发态 production build |
-| `Electron E2E` | `macos-15` arm64 | 30 分钟 | 锁文件安装、`npm run build`、`npm run e2e` | 开发态 Electron 的 43 条 E2E；依赖 Quality 成功 |
+| `Electron E2E` | `macos-15` arm64 | 30 分钟 | 锁文件安装、`npm run build`、`npm run e2e` | 开发态 Electron 的 44 条 E2E；依赖 Quality 成功 |
 
 实际 check-run 名称已核对为 `Quality` 和 `Electron E2E`，二者均已设为 `main` 的严格 Required Status Check。Branch Protection 同时启用管理员约束、线性历史和会话解决要求，并禁止强推与删除。
 
@@ -52,12 +52,14 @@ Checkout 关闭 `persist-credentials`；GitHub 官方 Action 使用审核过的�
 - 数据治理与列表窗口契约；
 - macOS 打包配置契约；
 - PDF/XLSX 文档解析契约。
+- 自动测试入口、隔离根和失败关闭路径契约。
 
 它不是 ESLint 的替代品，也不应被描述为完整代码风格检查。若后续需要引入 lint，必须单独评估依赖、规则、存量告警和渐进启用方式。
 
 ## 5. E2E、Smoke 与打包边界
 
-- Electron E2E 使用 `tests/e2e/helpers.ts` 创建临时 `LEANCLAW_DATA_DIR`，不应访问真实 `~/.leanclaw`；
+- Vitest 和 Playwright 在测试模块 import 前创建独立 test root/home/data/tmp；Electron E2E 的共享 launcher 禁止场景覆盖四个隔离变量；
+- Main、Runtime、MCP 子进程、文件工具、Shell cwd 与测试导出路径都受测试根硬边界保护，详见 [`test-isolation.md`](./test-isolation.md)；
 - CI 设置 Playwright `forbidOnly` 且不重试，误提交 `test.only` 或首次失败不会被静默掩盖；
 - 本 job 启动的是 `out/main/index.js`，因此只能证明开发态 Electron；
 - `npm run build` 只生成 production bundle，不生成 `.app`、DMG 或 ZIP；

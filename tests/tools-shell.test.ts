@@ -74,19 +74,32 @@ describe('resolveCwd（cwd 解析）', () => {
 
 describe('isCwdAllowed（cwd 白名单校验）', () => {
   it('cwd 等于允许目录本身视为合法', () => {
-    expect(isCwdAllowed('/data/workspace', ['/data/workspace'])).toBe(true)
+    expect(isCwdAllowed('/data/workspace', ['/data/workspace'], {})).toBe(true)
   })
 
   it('cwd 为允许目录的子目录视为合法', () => {
-    expect(isCwdAllowed('/data/workspace/sub', ['/data/workspace'])).toBe(true)
+    expect(isCwdAllowed('/data/workspace/sub', ['/data/workspace'], {})).toBe(true)
   })
 
   it('cwd 不在任何允许目录内视为非法', () => {
-    expect(isCwdAllowed('/etc', ['/data/workspace'])).toBe(false)
+    expect(isCwdAllowed('/etc', ['/data/workspace'], {})).toBe(false)
   })
 
   it('前缀相似但非真实子目录时判定为非法（避免 /data/workspace2 误通过）', () => {
-    expect(isCwdAllowed('/data/workspace2', ['/data/workspace'])).toBe(false)
+    expect(isCwdAllowed('/data/workspace2', ['/data/workspace'], {})).toBe(false)
+  })
+
+  it('测试模式把 LEANCLAW_TEST_ROOT 作为额外硬边界', () => {
+    expect(
+      isCwdAllowed('/tmp/real-user-project', ['/tmp'], {
+        LEANCLAW_TEST_ROOT: '/tmp/leanclaw-test'
+      })
+    ).toBe(false)
+    expect(
+      isCwdAllowed('/tmp/leanclaw-test/workspace', ['/tmp'], {
+        LEANCLAW_TEST_ROOT: '/tmp/leanclaw-test'
+      })
+    ).toBe(true)
   })
 })
 

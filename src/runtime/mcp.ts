@@ -9,6 +9,7 @@ import { registerDynamicTool, unregisterTool } from './tools'
 import { ToolError, type ToolDefinition } from './tool-types'
 import { extractMcpText, mcpToolId, resolveMcpRisk } from '../shared/mcp'
 import type { McpServerState, McpServerStatus } from '../shared/types'
+import { assertTestIsolationEnvironment } from './test-isolation'
 
 interface ToolMeta {
   toolId: string
@@ -130,10 +131,18 @@ async function attemptConnect(serverId: string): Promise<void> {
   const cfg = st.config
   let transport: StdioClientTransport | undefined
   try {
+    const childEnv = { ...getDefaultEnvironment(), ...cfg.env }
+    if (process.env.LEANCLAW_TEST_ROOT) {
+      assertTestIsolationEnvironment()
+      childEnv.LEANCLAW_TEST_ROOT = process.env.LEANCLAW_TEST_ROOT
+      childEnv.LEANCLAW_DATA_DIR = process.env.LEANCLAW_DATA_DIR as string
+      childEnv.HOME = process.env.HOME as string
+      childEnv.TMPDIR = process.env.TMPDIR as string
+    }
     transport = new StdioClientTransport({
       command: cfg.command,
       args: cfg.args,
-      env: { ...getDefaultEnvironment(), ...cfg.env }
+      env: childEnv
     })
     transport.onclose = (): void => handleDrop(serverId, 'MCP Server 连接已关闭')
     transport.onerror = (e): void => handleDrop(serverId, e.message)

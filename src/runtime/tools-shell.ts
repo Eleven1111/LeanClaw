@@ -4,6 +4,7 @@ import { getRuntimeConfig } from './config'
 import { getWorkspaceDir } from './db'
 import { ToolError, type ToolDefinition } from './tool-types'
 import type { RiskLevel } from '../shared/types'
+import { isPathAllowed } from './test-isolation'
 
 const EXEC_TIMEOUT_MS = 60000
 const MAX_OUTPUT_CHARS = 8192
@@ -29,8 +30,12 @@ export function resolveCwd(cwd: string | undefined, workspaceDir: string): strin
   return resolve(cwd)
 }
 
-export function isCwdAllowed(resolvedCwd: string, allowedDirs: string[]): boolean {
-  return allowedDirs.some((d) => resolvedCwd === resolve(d) || resolvedCwd.startsWith(resolve(d) + '/'))
+export function isCwdAllowed(
+  resolvedCwd: string,
+  allowedDirs: string[],
+  env: NodeJS.ProcessEnv = process.env
+): boolean {
+  return isPathAllowed(resolvedCwd, allowedDirs, env)
 }
 
 export function buildMinimalEnv(source: NodeJS.ProcessEnv): Record<string, string> {
