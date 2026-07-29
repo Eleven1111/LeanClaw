@@ -9,6 +9,30 @@ export interface LaunchedApp {
   dataDir: string
 }
 
+async function waitForRuntimeReady(window: Page): Promise<void> {
+  const deadline = Date.now() + 15_000
+  let lastError: unknown
+
+  while (Date.now() < deadline) {
+    try {
+      await window.evaluate(async () => {
+        const api = (
+          globalThis as unknown as {
+            api: { rpc(request: unknown): Promise<unknown> }
+          }
+        ).api
+        await api.rpc({ method: 'listTasks' })
+      })
+      return
+    } catch (error) {
+      lastError = error
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+  }
+
+  throw new Error(`LeanClaw Runtime did not become ready: ${String(lastError)}`)
+}
+
 export async function launchApp(
   env: Record<string, string> = {},
   existingDataDir?: string
@@ -26,6 +50,7 @@ export async function launchApp(
   })
   const window = await app.firstWindow()
   await window.waitForLoadState('domcontentloaded')
+  await waitForRuntimeReady(window)
   return { app, window, dataDir }
 }
 
