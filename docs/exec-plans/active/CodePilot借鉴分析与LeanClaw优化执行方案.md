@@ -11,7 +11,7 @@ user_approval: approved
 
 # CodePilot 借鉴分析与 LeanClaw 优化提升执行方案
 
-> 文档状态：P0 已于 2026-07-29 通过用户验收；P1 / T04 本地实现与预演完成，私有远端已建立，托管 Runner 待验证
+> 文档状态：P0 已于 2026-07-29 通过用户验收；P1 / T04 Runner 与失败证明完成，Required Check 强制执行受私有仓库账号套餐限制
 >
 > 创建日期：2026-07-29
 >
@@ -60,7 +60,7 @@ LeanClaw 已经拥有 CodePilot 很多做法想要达到的底座：独立 Utili
 | 项目 | 当前证据 | 结论 |
 |---|---|---|
 | CodePilot | 固定分析 `215c8f9`，不引用会继续漂移的 `main` 作为事实源 | 本文的外部链接均尽量固定到该提交 |
-| LeanClaw | 当前 `main@b994f9b`，Schema v13 | 以当前代码与《审计与交接》记录 AU 为现状基线 |
+| LeanClaw | 已验证代码基线 `main@9af111f`，Schema v13 | 以当前代码、远端 CI 与《审计与交接》记录 AV 为现状基线 |
 | 本轮验证 | `check:static` 18/18、typecheck、349/349 unit、build、受控 GUI 权限下 43/43 E2E 均通过 | 仅证明本地工作树；GitHub Node 24 Runner 尚未执行 |
 | Electron E2E | 本轮只核对清单为 29 个文件、43 条；仓库最近审计记录 43/43 与 s1–s18 18/18 通过 | 这是仓库已有证据，不冒充本轮重跑 |
 | 正式发行 | 当前 macOS 构建使用 ad-hoc identity，`hardenedRuntime=false` | 不能宣称已达到对外发行标准 |
@@ -305,7 +305,7 @@ flowchart LR
 | T08 | 打包产物验证 | 校验应用版本、Electron/native ABI、schema 启动、Runtime 健康、核心 Journey 和产物 hash | T04–T07 | 新打包 `.app` 在隔离数据根通过；验证针对最终产物，不复用旧 `.app` |
 | T09 | 依赖风险刷新与决策 | 联网刷新生产/开发依赖；按可达性、修复方式、降级风险分类 | T04 | 每个保留 advisory 有影响分析、缓解措施、复查日期；不为清零而盲目降级 |
 
-T04 当前状态：[`ci.yml`](../../../.github/workflows/ci.yml)、[`docs/ci.md`](../../ci.md)、Node LTS 固定、静态治理与 fail-closed 测试均已落盘；本地干净安装、349/349 unit、build 和 43/43 Electron E2E 已通过。由于本地仓库尚无 Git remote，GitHub 托管 Runner、故意失败分支和 Required Status Check 尚无证据，T04 不关闭，也不进入 T05。
+T04 当前状态：[`ci.yml`](../../../.github/workflows/ci.yml)、[`docs/ci.md`](../../ci.md)、Node LTS 固定、静态治理与 fail-closed 测试均已落盘；本地干净安装、349/349 unit、build 和 43/43 Electron E2E 已通过。私有仓库 `Eleven1111/LeanClaw` 已建立；`main@9af111f` 的真实 macOS 15 arm64 / Node 24.18.0 CI 全绿。临时 Draft PR #1 的确定性失败使 Quality 失败并跳过 Electron E2E，随后 PR 与分支已清理。剩余外部门禁是 Required Status Check：GitHub 对当前私有个人仓库返回 HTTP 403，要求升级 Pro 或改为 public。仓库保持 private，T04 暂不关闭，也不进入 T05。
 
 #### CP1：工程门禁
 
