@@ -4,7 +4,7 @@
 >
 > 刷新日期：2026-07-29
 >
-> 已验证代码基线：`codex/t05-test-isolation@6a290f8`（PR #4 首轮 Required Checks 已通过）
+> 已验证代码基线：`main@1bd9722`（其后的本轮变更仅更新合并后 CI 证据）
 >
 > 维护规则：代码、Schema、测试门禁、打包方式或已知边界变化时，必须在同一任务内刷新本文
 
@@ -93,7 +93,7 @@
 - 启动预热和 Renderer 延迟加载尚未专项评估；
 - TaskSummary 的 SQL 批量投影与完整 Task push 派生共用构造入口，但尚无逐字节对拍测试。
 
-自动测试隔离已在 T05 实现并通过本地完整回归；[PR #4 run 30455889598](https://github.com/Eleven1111/LeanClaw/actions/runs/30455889598) 又在 Node 24.18.0 / macOS 15 arm64 上通过 `Quality` 与 `Electron E2E`。T05 已关闭，执行指针移到 T06。
+自动测试隔离已在 T05 实现并通过本地完整回归；[PR #4 最终 run 30457091843](https://github.com/Eleven1111/LeanClaw/actions/runs/30457091843) 与合并后的 [`main` run 30457521961](https://github.com/Eleven1111/LeanClaw/actions/runs/30457521961) 又在 Node 24.18.0 / macOS 15 arm64 上通过 `Quality` 与 `Electron E2E`。T05 已关闭，执行指针移到 T06。
 
 性能数字是指定夹具和机器上的样本，不是所有机器的 SLA。任何后续优化必须先复现、归因，再设门槛。
 
