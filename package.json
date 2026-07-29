@@ -11,6 +11,7 @@
     "package:mac": "npm run build && electron-builder --mac --dir --arm64 --publish never",
     "dist:mac": "npm run build && electron-builder --mac dmg zip --arm64 --publish never",
     "start": "electron-vite preview",
+    "check:static": "vitest run tests/ci.test.ts tests/governance.test.ts tests/packaging.test.ts tests/document-files.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run",
     "e2e": "playwright test",
