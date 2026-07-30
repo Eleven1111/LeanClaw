@@ -2,7 +2,7 @@
 
 > 分支：`codex/t07-fault-path-coverage`（基于 `main@7b62f68`）
 >
-> 更新时间：2026-07-30（T06–T08 已关闭并合并；执行指针 T09）
+> 更新时间：2026-07-30（T06–T08 已关闭并合并；T09 工程完成，待远端门禁）
 
 ## 任务边界（本任务只做这些）
 
@@ -57,3 +57,14 @@ T07 的裁决：「认领先推进、失败不回滚 `next_run_at`」保持不�
 | E | 文档 + PR | done — [PR #10](https://github.com/Eleven1111/LeanClaw/pull/10) 全绿并 squash merge 为 `main@490205f` |
 
 当前产物：DMG `9006f9b1…`、ZIP `b98da328…`。状态 `Packaged smoke pass`，不是 `Release ready`/`Shipped`。
+
+## T09 阶段
+
+| 阶段 | 内容 | 状态 |
+|---|---|---|
+| A | 联网刷新 advisory 并取权威 patched 版本 | done |
+| B | 按 production/development/build-time/不可达分层判定 | done — `docs/dependency-risk.md` |
+| C | 修生产树唯一项（SDK ^1.30.0 + hono override） | done — `npm audit --omit=dev` 为 0 |
+| D | 保留 brace-expansion 并记录缓解与复查日期 2026-08-30 | done |
+| E | lockfile 变更后全量重跑 + 重新打包 | done — 新 DMG `27ddfb22…` / ZIP `fdefecd6…` |
+| F | 文档 + PR | in_progress |
