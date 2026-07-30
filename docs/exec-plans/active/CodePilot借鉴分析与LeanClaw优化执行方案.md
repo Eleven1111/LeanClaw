@@ -2,7 +2,7 @@
 plan_id: leanclaw-codepilot-optimization
 status: active
 created_at: 2026-07-29
-updated_at: 2026-07-29
+updated_at: 2026-07-30
 current_phase: P1
 current_task: T06
 engineering_status: in_progress
@@ -308,6 +308,8 @@ flowchart LR
 T04 已完成并关闭：[`ci.yml`](../../../.github/workflows/ci.yml)、[`docs/ci.md`](../../ci.md)、Node LTS 固定、静态治理与 fail-closed 测试均已落盘；本地干净安装、349/349 unit、build 和 43/43 Electron E2E 已通过。仓库已公开并为 `main` 启用严格 Branch Protection：`Quality` 与 `Electron E2E` 都是 Required Check，管理员同样受约束，禁止强推和删除。临时 PR #2 的确定性失败使 Quality 失败、Electron E2E 跳过，GitHub 返回 `mergeStateStatus=BLOCKED`；证据取得后 PR 和分支均已清理。执行指针移到 T05。
 
 T05 已完成并关闭：Vitest、Playwright 和 Runtime smoke 会在 import/启动前创建独立 test root/home/data/tmp；Main、Utility Runtime、MCP 子进程、文件工具、Shell cwd 与导出路径均加入测试根硬边界。越界、符号链接逃逸、过宽 `allowedDirs` 和场景覆盖隔离变量都有失败反证。本地 static 22/22、typecheck、357/357 unit、build、Runtime smoke 与 44/44 Electron E2E 通过，临时根无残留；[PR #4 最终 run 30457091843](https://github.com/Eleven1111/LeanClaw/actions/runs/30457091843) 和合并后的 [`main` run 30457521961](https://github.com/Eleven1111/LeanClaw/actions/runs/30457521961) 也通过 `Quality` 与 `Electron E2E`。详细契约见 [`docs/test-isolation.md`](../../test-isolation.md)。执行指针移到 T06，T08 的最终 `.app`/CDP 验证不前移。
+
+T06 工程实现完成，等待远端 Required Checks 与合并后才关闭：新增 `npm run migration:evidence`（Node 编排 + `ELECTRON_RUN_AS_NODE` 真实 SQLite），13 个场景覆盖空库→v13、v12→v13、old-binary v8→v13、新库与升级库结构指纹对拍、3 个未知对象保持、连续三次启动幂等、v14 库拒绝、版本台账多行/文本/负数/小数拒绝、0 行台账 bootstrap、固定注入点整体回滚与回滚后向前恢复。fixture 由锚点提交 `15831e5` 自己的 `initDb()` 创建（`source_kind: synthetic-old-binary`），生成脚本、manifest、checksum 与语义指纹可追溯，全程未接触真实 `~/.leanclaw`。实现侧最小修正：`pendingMigrations()` 对更高版本抛 `schema-too-new`、`readSchemaVersion()` 强制单行非负整数、新增 `applyMigrations()` 迁移应用边界并把 bootstrap 纳入同一事务、`initDb()` 失败不发布半成品连接。本地 static 22/22、typecheck、363/363 unit、迁移证据 13/13、build、Runtime smoke 与 45/45 Electron E2E 通过。开发态迁移不冒充 packaged migration，最终 `.app` 旧库升级仍在 T08。详见 [Migration 护栏](../../guardrails/Migration.md) 与 [记录 AY](../../审计与交接.md)。
 
 #### CP1：工程门禁
 

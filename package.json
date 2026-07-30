@@ -16,6 +16,7 @@
     "test": "vitest run",
     "e2e": "playwright test",
     "smoke": "node tests/runtime-smoke.mjs",
+    "migration:evidence": "node tests/migration-evidence.mjs",
     "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {

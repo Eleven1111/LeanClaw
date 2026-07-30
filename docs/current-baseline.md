@@ -2,9 +2,9 @@
 
 > 状态：当前事实入口
 >
-> 刷新日期：2026-07-29
+> 刷新日期：2026-07-30
 >
-> 已验证代码基线：`main@1bd9722`（其后的本轮变更仅更新合并后 CI 证据）
+> 已验证代码基线：`codex/t06-migration-evidence`（基于 `main@a1e3496`）；远端门禁证据见 T06 PR
 >
 > 维护规则：代码、Schema、测试门禁、打包方式或已知边界变化时，必须在同一任务内刷新本文
 
@@ -42,7 +42,7 @@
 | 维度 | 当前事实 | 代码/文档证据 |
 |---|---|---|
 | 应用 | Electron + React + TypeScript，本机单用户桌面应用 | [`package.json`](../package.json) |
-| 持久化 | SQLite；迁移严格递增并在事务内执行 | [`src/runtime/db.ts`](../src/runtime/db.ts) |
+| 持久化 | SQLite；迁移严格递增并在单个事务内执行；高版本库与异常版本台账失败关闭 | [`src/runtime/db.ts`](../src/runtime/db.ts) |
 | Schema | **v13**；新增 13 个热路径索引 | [`src/runtime/db.ts`](../src/runtime/db.ts#L425) |
 | 执行主链 | Task → Run → Step → ModelCall/ToolCall → Artifact/Evidence/Verification | [`src/runtime/db.ts`](../src/runtime/db.ts#L21) |
 | 状态事实 | 正常业务状态变更经过 `transition()`；创建初态和崩溃恢复是受控例外，详见 State 护栏 | [`src/runtime/state.ts`](../src/runtime/state.ts#L15)、[`docs/guardrails/State.md`](./guardrails/State.md) |
@@ -52,25 +52,28 @@
 | 列表投影 | `TaskSummaryView`；固定 5 条批量查询，详情按需加载 | [`src/runtime/views.ts`](../src/runtime/views.ts#L186) |
 | 隐私 | Renderer 数据使用共享白名单和脱敏函数 | [`src/shared/privacy.ts`](../src/shared/privacy.ts) |
 | 测试隔离 | 自动测试在 import 前固定独立 test root/home/data/tmp；Main、Runtime、MCP 与文件/Shell 能力失败关闭 | [`docs/test-isolation.md`](./test-isolation.md)、[`src/runtime/test-isolation.ts`](../src/runtime/test-isolation.ts) |
+| 迁移证据 | old-binary v8 fixture + 13 个真实 SQLite 场景，独立入口 `npm run migration:evidence` | [`docs/guardrails/Migration.md`](./guardrails/Migration.md)、[`tests/fixtures/migrations/v8-old-binary/README.md`](../tests/fixtures/migrations/v8-old-binary/README.md) |
 | 打包目标 | macOS arm64，目录包、DMG、ZIP | [`package.json`](../package.json#L8) |
 | 签名状态 | `identity: "-"`、`hardenedRuntime: false`，属于 ad-hoc 本机产物 | [`package.json`](../package.json#L65) |
-| 远端 CI | PR/main workflow 已实现；Node 24.18.0、macOS arm64、Quality 与 Electron E2E 分层 | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)、[`docs/ci.md`](./ci.md) |
+| 远端 CI | PR/main workflow 已实现；Node 24.18.0、macOS arm64、Quality（含迁移证据）与 Electron E2E 分层 | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)、[`docs/ci.md`](./ci.md) |
 
 ## 4. 当前验证状态
 
 ### 4.1 本轮直接执行
 
-执行日期：2026-07-29。
+执行日期：2026-07-30。
 
 | 门禁 | 命令 | 结果 |
 |---|---|---|
 | TypeScript | `npm run typecheck` | PASS |
 | 静态治理 | `npm run check:static` | **5 个文件、22/22 PASS** |
-| 单元测试 | `npm test` | **40 个文件、357/357 PASS** |
+| 单元测试 | `npm test` | **40 个文件、363/363 PASS** |
+| 迁移证据 | `npm run migration:evidence` | 真实 SQLite **13/13 PASS** |
 | Production build | `npm run build` | PASS |
 | Runtime smoke | `npm run smoke` | 独立临时根内 `delivered`，退出后无残留 |
-| Electron E2E | `npm run e2e` | 受控 GUI 权限下 **44/44 PASS** |
-| 干净安装预演 | 临时副本执行 `npm ci`，随后 static/typecheck/unit/build | Node 23.6.0 arm64 下 PASS；不替代远端 Node 24.18.0 Runner |
+| Electron E2E | `npm run e2e` | 受控 GUI 权限下 **45/45 PASS** |
+
+`npm ci` 干净安装预演是 2026-07-29 T05 轮的证据（Node 23.6.0 arm64），本轮未重跑；依赖未变更。
 
 ### 4.2 最近一次仓库完整证据
 
@@ -93,6 +96,8 @@
 - 启动预热和 Renderer 延迟加载尚未专项评估；
 - TaskSummary 的 SQL 批量投影与完整 Task push 派生共用构造入口，但尚无逐字节对拍测试。
 
+T06 已用 old-binary v8 fixture 补齐迁移证据：13 个真实 SQLite 场景全绿，覆盖升级、结构指纹对拍、未知对象保持、重复启动幂等、高版本库与异常版本台账失败关闭、固定注入点整体回滚，详见 [Migration 护栏](./guardrails/Migration.md) 与 [记录 AY](./审计与交接.md)。
+
 自动测试隔离已在 T05 实现并通过本地完整回归；[PR #4 最终 run 30457091843](https://github.com/Eleven1111/LeanClaw/actions/runs/30457091843) 与合并后的 [`main` run 30457521961](https://github.com/Eleven1111/LeanClaw/actions/runs/30457521961) 又在 Node 24.18.0 / macOS 15 arm64 上通过 `Quality` 与 `Electron E2E`。T05 已关闭，执行指针移到 T06。
 
 性能数字是指定夹具和机器上的样本，不是所有机器的 SLA。任何后续优化必须先复现、归因，再设门槛。
@@ -101,7 +106,7 @@
 
 | 优先级 | 缺口 | 当前边界 |
 |---:|---|---|
-| P0 | v8 迁移 fixture 由历史列定义重建 | 不证明未知手工索引、约束或真实数据组合兼容 |
+| P0 | packaged `.app` 的旧库升级未验证 | T06 只覆盖开发态入口 `out/main/index.js`；最终产物迁移属于 T08 |
 | P0 | Automation DB 级故障未在真实 Runtime 内注入验证 | 已修复进程崩溃，但“认领先推进、失败不回滚”仍是既有语义 |
 | P0 | TaskSummary 两条派生路径无逐字节对拍 | 当前由单一构造入口、单测和 E2E 间接保护 |
 | P1 | Provider/Model/Tool/MCP/Shell/Scheduler 缺少统一能力与错误契约 | 已有 Runtime Center、Provider 测试和诊断导出，不应重建平行页面 |
@@ -109,6 +114,9 @@
 | P1 | `refineTask` 复用最新 Run，Run Inspector 只读取最新 Run | Run 历史是否升级属于待批准产品决策 |
 | P1 | 多个 Renderer/Runtime 文件职责较重 | 重构前必须先锁定行为，不新增无必要依赖 |
 | 条件式 | 未配置 Developer ID、hardened runtime、notarization、正式升级链 | 只有决定对外分发后才启动 |
+| P1 | 高版本库失败关闭缺少面向用户的解释 | 数据库层已拒绝并抛 `schema-too-new`，但 Runtime 会因此启动失败退出；解释性 UI 属于 P2 Runtime Doctor |
+| P1 | `schema_version` 单行性无数据库级约束 | 由 `readSchemaVersion()` 读取时强制；加约束需要新迁移 |
+| P1 | 迁移起点只覆盖空库、v8 与 v12 | 未穷举 v1–v11 每个中间版本 |
 | 动态 | 依赖 advisory 会随时间变化 | 必须联网刷新并按生产可达性、非降级修复和缓解措施判断 |
 
 ## 7. 当前非目标
@@ -135,6 +143,7 @@ rg -n "version: [0-9]+" src/runtime/db.ts
 npm run typecheck
 npm run check:static
 npm test
+npm run migration:evidence
 npm run build
 npx playwright test --list
 ```

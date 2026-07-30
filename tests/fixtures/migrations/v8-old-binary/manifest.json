@@ -1,0 +1,50 @@
+{
+  "fixture_id": "v8-old-binary",
+  "source_kind": "synthetic-old-binary",
+  "schema_version": 8,
+  "generated_at": "2026-07-30",
+  "source_commit": "15831e58cc8eebf2e08d6fff10783e9d168e0f34",
+  "source_commit_short": "15831e5",
+  "generator": "tests/fixtures/migrations/v8-old-binary/generate.mjs",
+  "generate_command": "node tests/fixtures/migrations/v8-old-binary/generate.mjs",
+  "schema_created_by": "锚点提交自身构建产物 out/main/runtime.js 的 initDb()",
+  "rows_created_by": "generate.mjs 的 SEED_SQL（公开合成数据，经 /usr/bin/sqlite3 写入旧库）",
+  "node_version": "v23.6.0",
+  "electron_version": "43.1.0",
+  "platform": "darwin-arm64",
+  "sha256": "048630e9962e0bbfb6c71e68770f0d04ab204611c831aec00ad95e9b9f7911d4",
+  "semantic_fingerprint_sha256": "65452c568130f2e67e65cb23c10c943a8f6b240cefae20fc8ac06c2be33eff5a",
+  "row_counts": {
+    "andon_events": 0,
+    "approvals": 0,
+    "artifacts": 1,
+    "custom_recipes": 0,
+    "evidence": 1,
+    "legacy_task_audit": 1,
+    "model_calls": 0,
+    "projects": 0,
+    "rule_sets": 0,
+    "run_events": 1,
+    "run_events_archive": 1,
+    "runs": 1,
+    "schedules": 1,
+    "schema_version": 1,
+    "steps": 1,
+    "task_presets": 0,
+    "tasks": 1,
+    "tool_calls": 0,
+    "verifications": 0
+  },
+  "unknown_objects": [
+    "legacy_task_audit（手工审计表）",
+    "idx_legacy_manual_task_created（手工索引）",
+    "trg_legacy_task_audit（手工触发器）"
+  ],
+  "privacy": {
+    "real_user_database_read": false,
+    "contains_user_content": false,
+    "contains_credentials": false,
+    "note": "全部行由 SEED_SQL 生成；旧 Runtime 的 HOME/TMPDIR/LEANCLAW_DATA_DIR 均指向临时目录"
+  },
+  "byte_reproducibility": "SQLite 二进制字节不保证逐字节可复现（页布局、freelist 与生成时间相关）；可复现的是 semantic_fingerprint_sha256 与 row_counts"
+}

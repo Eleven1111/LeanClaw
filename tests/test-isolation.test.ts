@@ -64,15 +64,21 @@ describe('test isolation contract', () => {
     )
     expect(JSON.parse(read('package.json')).scripts.smoke).toBe('node tests/runtime-smoke.mjs')
 
-    const smoke = read('tests/runtime-smoke.mjs')
-    for (const key of [
-      'LEANCLAW_TEST_ROOT',
-      'LEANCLAW_DATA_DIR',
-      'HOME',
-      'TMPDIR'
-    ]) {
-      expect(smoke).toContain(key)
+    expect(JSON.parse(read('package.json')).scripts['migration:evidence']).toBe(
+      'node tests/migration-evidence.mjs'
+    )
+
+    for (const path of ['tests/runtime-smoke.mjs', 'tests/migration-evidence.mjs']) {
+      const entry = read(path)
+      for (const key of ['LEANCLAW_TEST_ROOT', 'LEANCLAW_DATA_DIR', 'HOME', 'TMPDIR']) {
+        expect(entry).toContain(key)
+      }
+      expect(entry).toContain('rmSync(root, { recursive: true, force: true })')
     }
-    expect(smoke).toContain('rmSync(root, { recursive: true, force: true })')
+
+    // 迁移证据场景在建库前必须先断言隔离契约，且只读取受控 fixture
+    const scenarios = read('tests/migration-evidence-scenarios.cjs')
+    expect(scenarios).toContain('assertTestIsolationEnvironment()')
+    expect(scenarios).not.toContain('.leanclaw')
   })
 })
