@@ -102,6 +102,8 @@ npm run e2e
 
 10. [T07 PR #8 run 30523391877](https://github.com/Eleven1111/LeanClaw/actions/runs/30523391877) 通过：Quality 1m17s（新增 `Summary parity evidence` 步骤，日志为「双路径对拍台账：5/5 PASS」）、Electron E2E 4m02s（46 条）。squash merge 为 `main@16809b9` 后，[`main` run 30523728447](https://github.com/Eleven1111/LeanClaw/actions/runs/30523728447) 再次通过：Quality 1m08s、Electron E2E 3m01s。
 
+11. [T08 PR #10 run 30538036581](https://github.com/Eleven1111/LeanClaw/actions/runs/30538036581) 通过：Quality 1m38s、Electron E2E 3m59s（46 条）。squash merge 为 `main@490205f` 后，[`main` run 30538427593](https://github.com/Eleven1111/LeanClaw/actions/runs/30538427593) 再次通过：Quality 48s、Electron E2E 3m51s。T08 的产物验证（`npm run verify:packaged`）刻意留在本机，不进这两个 job。
+
 T04 的代码、真实 Runner、失败关闭和平台级合并阻断证据均已完整。
 
 本轮还在隔离副本临时注入 `test.only`，`CI=true npx playwright test --list` 按预期以退出码 1 拒绝执行；移除临时文件后恢复识别 29 个文件、43 条测试。这证明本地 fail-closed 配置有效，但不证明 GitHub 分支保护会拦截。

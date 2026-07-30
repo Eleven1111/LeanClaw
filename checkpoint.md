@@ -2,7 +2,7 @@
 
 > 分支：`codex/t07-fault-path-coverage`（基于 `main@7b62f68`）
 >
-> 更新时间：2026-07-30（T06、T07 已关闭并合并；T08 工程完成，待远端门禁）
+> 更新时间：2026-07-30（T06–T08 已关闭并合并；执行指针 T09）
 
 ## 任务边界（本任务只做这些）
 
@@ -54,6 +54,6 @@ T07 的裁决：「认领先推进、失败不回滚 `next_run_at`」保持不�
 | B | `rm -rf release && npm run dist:mac` 重新生成产物 | done |
 | C | 台账 10/10（含 packaged migration） | done |
 | D | 回归：static/typecheck/unit/两个证据 harness/smoke/E2E | done |
-| E | 文档 + PR | in_progress |
+| E | 文档 + PR | done — [PR #10](https://github.com/Eleven1111/LeanClaw/pull/10) 全绿并 squash merge 为 `main@490205f` |
 
 当前产物：DMG `9006f9b1…`、ZIP `b98da328…`。状态 `Packaged smoke pass`，不是 `Release ready`/`Shipped`。
