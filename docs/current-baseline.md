@@ -4,7 +4,7 @@
 >
 > 刷新日期：2026-07-30
 >
-> 已验证代码基线：`main@a91c39a`（T06 合并后）
+> 已验证代码基线：`codex/t07-fault-path-coverage`（基于 `main@7b62f68`）；远端门禁证据见 T07 PR
 >
 > 维护规则：代码、Schema、测试门禁、打包方式或已知边界变化时，必须在同一任务内刷新本文
 
@@ -52,6 +52,7 @@
 | 列表投影 | `TaskSummaryView`；固定 5 条批量查询，详情按需加载 | [`src/runtime/views.ts`](../src/runtime/views.ts#L186) |
 | 隐私 | Renderer 数据使用共享白名单和脱敏函数 | [`src/shared/privacy.ts`](../src/shared/privacy.ts) |
 | 测试隔离 | 自动测试在 import 前固定独立 test root/home/data/tmp；Main、Runtime、MCP 与文件/Shell 能力失败关闭 | [`docs/test-isolation.md`](./test-isolation.md)、[`src/runtime/test-isolation.ts`](../src/runtime/test-isolation.ts) |
+| 投影一致性 | 摘要两条派生路径由 `npm run parity:evidence` 逐字节对拍，共享同一脱敏规则 | [`tests/summary-parity-scenarios.cjs`](../tests/summary-parity-scenarios.cjs) |
 | 迁移证据 | old-binary v8 fixture + 13 个真实 SQLite 场景，独立入口 `npm run migration:evidence` | [`docs/guardrails/Migration.md`](./guardrails/Migration.md)、[`tests/fixtures/migrations/v8-old-binary/README.md`](../tests/fixtures/migrations/v8-old-binary/README.md) |
 | 打包目标 | macOS arm64，目录包、DMG、ZIP | [`package.json`](../package.json#L8) |
 | 签名状态 | `identity: "-"`、`hardenedRuntime: false`，属于 ad-hoc 本机产物 | [`package.json`](../package.json#L65) |
@@ -67,11 +68,12 @@
 |---|---|---|
 | TypeScript | `npm run typecheck` | PASS |
 | 静态治理 | `npm run check:static` | **5 个文件、22/22 PASS** |
-| 单元测试 | `npm test` | **40 个文件、363/363 PASS** |
+| 单元测试 | `npm test` | **40 个文件、367/367 PASS** |
 | 迁移证据 | `npm run migration:evidence` | 真实 SQLite **13/13 PASS** |
+| 双路径对拍 | `npm run parity:evidence` | 真实 SQLite **5/5 PASS** |
 | Production build | `npm run build` | PASS |
 | Runtime smoke | `npm run smoke` | 独立临时根内 `delivered`，退出后无残留 |
-| Electron E2E | `npm run e2e` | 受控 GUI 权限下 **45/45 PASS** |
+| Electron E2E | `npm run e2e` | 受控 GUI 权限下 **46/46 PASS** |
 
 `npm ci` 干净安装预演是 2026-07-29 T05 轮的证据（Node 23.6.0 arm64），本轮未重跑；依赖未变更。
 
@@ -94,7 +96,7 @@
 - 记录 AU 的样本中，`listTasks` RPC 为 31.7ms，payload 为 494KB（494 字节/Task）；
 - 545–690ms 的完整首屏测量主要包含 Electron 冷启动；
 - 启动预热和 Renderer 延迟加载尚未专项评估；
-- TaskSummary 的 SQL 批量投影与完整 Task push 派生共用构造入口，但尚无逐字节对拍测试。
+- TaskSummary 的 SQL 批量投影与完整 Task push 派生共用构造入口，并由 `npm run parity:evidence` 逐字节对拍守住（T07）。
 
 T06 已用 old-binary v8 fixture 补齐迁移证据：13 个真实 SQLite 场景全绿，覆盖升级、结构指纹对拍、未知对象保持、重复启动幂等、高版本库与异常版本台账失败关闭、固定注入点整体回滚，详见 [Migration 护栏](./guardrails/Migration.md) 与 [记录 AY](./审计与交接.md)。
 
@@ -107,8 +109,7 @@ T06 已用 old-binary v8 fixture 补齐迁移证据：13 个真实 SQLite 场景
 | 优先级 | 缺口 | 当前边界 |
 |---:|---|---|
 | P0 | packaged `.app` 的旧库升级未验证 | T06 只覆盖开发态入口 `out/main/index.js`；最终产物迁移属于 T08 |
-| P0 | Automation DB 级故障未在真实 Runtime 内注入验证 | 已修复进程崩溃，但“认领先推进、失败不回滚”仍是既有语义 |
-| P0 | TaskSummary 两条派生路径无逐字节对拍 | 当前由单一构造入口、单测和 E2E 间接保护 |
+| P1 | Automation「认领先推进、失败不回滚」是刻意保留的语义 | T07 已在真实 Runtime 注入 DB 故障验证：不假成功、不重复、不静默跳过；回退 `next_run_at` 会把坏计划变成每 tick 热重试，因此保持不回退，改为在卡片上显示「触发失败」 |
 | P1 | Provider/Model/Tool/MCP/Shell/Scheduler 缺少统一能力与错误契约 | 已有 Runtime Center、Provider 测试和诊断导出，不应重建平行页面 |
 | P1 | 模型 primary/fallback 缺少结构化错误语义 | fallback 双失败时用户无法看到完整因果链 |
 | P1 | `refineTask` 复用最新 Run，Run Inspector 只读取最新 Run | Run 历史是否升级属于待批准产品决策 |
@@ -144,6 +145,7 @@ npm run typecheck
 npm run check:static
 npm test
 npm run migration:evidence
+npm run parity:evidence
 npm run build
 npx playwright test --list
 ```

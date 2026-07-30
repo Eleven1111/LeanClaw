@@ -42,6 +42,7 @@ applies_to: renderer-projection, activity, need-you, diagnostics, secrets, local
 | [`src/shared/activity.ts`](../../src/shared/activity.ts) | Activity 事件集合、actor 语义和用户视图。 |
 | [`src/runtime/activity.ts`](../../src/runtime/activity.ts) | 从数据库读取并投影 Activity。 |
 | [`src/runtime/need-you.ts`](../../src/runtime/need-you.ts) | Need You 分类、排序和 detail 脱敏。 |
+| [`tests/summary-parity-scenarios.cjs`](../../tests/summary-parity-scenarios.cjs) | 真实 SQLite 下强制两条摘要派生路径逐字节一致，含脱敏结果。 |
 | [`src/main/settings.ts`](../../src/main/settings.ts) | safeStorage、Provider/MCP 密钥保存与最小设置视图。 |
 | [`src/main/diagnostics.ts`](../../src/main/diagnostics.ts) | 诊断序列化、轮转、打包与临时目录清理。 |
 | [`src/main/index.ts`](../../src/main/index.ts) | Main privateRoots 和安全导出入口。 |
@@ -65,6 +66,7 @@ applies_to: renderer-projection, activity, need-you, diagnostics, secrets, local
 2. **相对路径不是当前 redaction 的重点。** 若相对路径本身可识别用户目录，现有规则可能不会处理。
 3. **新增事件忘记登记会安全退化为 `null`。** 这不会泄漏，但会造成 UI 信息丢失。
 4. **`source`、`excerpt`、`contentPreview`、`taskGoal` 依赖上游净化。** 当前不是所有字段都在视图层二次 redaction。
+5. **批量 SQL 投影天生绕过视图层脱敏。** 完整视图逐字段调用 `redactTaskPrivatePaths`，而批量投影直接返回列值；新增摘要字段必须显式补脱敏，并由 `npm run parity:evidence` 的逐字节对拍守住。
 5. **前端组件不是安全边界。** Activity/Need You/Run Inspector 必须收到已经投影的数据。
 6. **URL 被保留不代表可以任意打开。** 协议、来源和外部导航权限是另一道安全边界。
 7. **诊断包按文件白名单工作。** 绕过统一日志入口会造成不可控内容或诊断缺失。
@@ -89,3 +91,4 @@ applies_to: renderer-projection, activity, need-you, diagnostics, secrets, local
 | 2026-07-29 | 以“最小投影 + 具名路径窄例外”描述 Renderer 边界 | 与现有文件打开能力一致，避免虚假的零路径承诺。 |
 | 2026-07-29 | 原始审计事实可以保留在 SQLite，但不能原样进入 Renderer | 同时满足本地审计和最小披露。 |
 | 2026-07-29 | 把自由文本和 evidence 预览列为持续审查面 | 当前部分字段依赖上游净化，不能宣称已全覆盖。 |
+| 2026-07-30 | 同一视图的多条派生路径必须共享脱敏规则，并由逐字节对拍强制 | T07 的对拍发现 `listTaskSummaries()` 的 `lastDoneLabel` 直接来自 SQL、未脱敏，而推送派生路径已脱敏；同一行文案会随来源不同而泄漏 Task 私有绝对路径。 |

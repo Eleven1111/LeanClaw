@@ -64,21 +64,32 @@ describe('test isolation contract', () => {
     )
     expect(JSON.parse(read('package.json')).scripts.smoke).toBe('node tests/runtime-smoke.mjs')
 
-    expect(JSON.parse(read('package.json')).scripts['migration:evidence']).toBe(
-      'node tests/migration-evidence.mjs'
-    )
+    const scripts = JSON.parse(read('package.json')).scripts as Record<string, string>
+    expect(scripts['migration:evidence']).toBe('node tests/migration-evidence.mjs')
+    expect(scripts['parity:evidence']).toBe('node tests/summary-parity.mjs')
 
-    for (const path of ['tests/runtime-smoke.mjs', 'tests/migration-evidence.mjs']) {
+    // 真实 SQLite 证据入口共用同一个启动器，隔离根由它统一安装并清理
+    for (const path of ['tests/runtime-smoke.mjs', 'tests/support/electron-evidence.mjs']) {
       const entry = read(path)
       for (const key of ['LEANCLAW_TEST_ROOT', 'LEANCLAW_DATA_DIR', 'HOME', 'TMPDIR']) {
         expect(entry).toContain(key)
       }
       expect(entry).toContain('rmSync(root, { recursive: true, force: true })')
     }
+    // 场景参数不得覆盖四个隔离变量：展开顺序必须让隔离变量在后
+    const launcher = read('tests/support/electron-evidence.mjs')
+    expect(launcher.indexOf('...(options.env ?? {})')).toBeLessThan(
+      launcher.indexOf('LEANCLAW_TEST_ROOT: root')
+    )
 
-    // 迁移证据场景在建库前必须先断言隔离契约，且只读取受控 fixture
-    const scenarios = read('tests/migration-evidence-scenarios.cjs')
-    expect(scenarios).toContain('assertTestIsolationEnvironment()')
-    expect(scenarios).not.toContain('.leanclaw')
+    // 证据场景在建库前必须先断言隔离契约，且不触碰真实用户数据目录
+    for (const path of [
+      'tests/migration-evidence-scenarios.cjs',
+      'tests/summary-parity-scenarios.cjs'
+    ]) {
+      const scenarios = read(path)
+      expect(scenarios).toContain('assertTestIsolationEnvironment()')
+      expect(scenarios).not.toContain('.leanclaw')
+    }
   })
 })

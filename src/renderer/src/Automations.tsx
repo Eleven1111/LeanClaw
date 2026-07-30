@@ -37,6 +37,8 @@ function cadenceLabel(item: ScheduleView): string {
 }
 
 function resultLabel(item: ScheduleView): string {
+  // 认领已推进但没有 Task 落地时，显示上一次的结果就是假成功
+  if (item.lastTriggerFailed) return '触发失败'
   if (!item.lastTaskUserStatus) return '尚无运行'
   if (item.lastTaskNeedsAttention) return '需要你处理'
   const labels: Record<string, string> = {
@@ -351,13 +353,19 @@ export function Automations({
                 <div><span>频率</span><strong>{cadenceLabel(item)}</strong><small>{LOCAL_TIME_ZONE}</small></div>
                 <div><span>执行者</span><strong>{item.agentName ?? '默认执行器'}</strong><small>{item.recipeTitle}</small></div>
                 <div><span>下次运行</span><strong>{item.enabled ? formatTimestamp(item.nextRunAt) : '暂停中'}</strong><small>不会补跑错过的时段</small></div>
-                <div className={item.lastTaskNeedsAttention ? 'attention' : ''}>
+                <div
+                  className={
+                    item.lastTaskNeedsAttention || item.lastTriggerFailed ? 'attention' : ''
+                  }
+                >
                   <span>最近结果</span>
                   <strong>{resultLabel(item)}</strong>
                   <small>
-                    {item.lastTaskCreatedAt
-                      ? `${item.lastTriggerSource === 'manual' ? '手动' : '定时'} · ${formatTimestamp(item.lastTaskCreatedAt)}`
-                      : '运行后在此显示'}
+                    {item.lastTriggerFailed
+                      ? `定时 · ${formatTimestamp(item.lastTriggeredAt ?? '')} · 未创建任务，原因见诊断`
+                      : item.lastTaskCreatedAt
+                        ? `${item.lastTriggerSource === 'manual' ? '手动' : '定时'} · ${formatTimestamp(item.lastTaskCreatedAt)}`
+                        : '运行后在此显示'}
                   </small>
                 </div>
               </div>

@@ -20,7 +20,11 @@ import { fileEditRecipe, getRecipe, listRecipes, registerRecipe, unregisterRecip
 import { buildCustomRecipe } from './custom-recipe'
 import { validateCustomRecipeInput } from '../shared/custom-recipe'
 import { canTransition, USER_STATUS_MAP } from '../shared/machine'
-import { nextOccurrence, validateScheduleInput } from '../shared/schedule'
+import {
+  lastTriggerProducedNoTask,
+  nextOccurrence,
+  validateScheduleInput
+} from '../shared/schedule'
 import type { DueSchedule } from './schedules'
 import {
   agentDeleteBlocker,
@@ -713,7 +717,8 @@ function listSchedules(): ScheduleView[] {
       : null,
     lastTaskNeedsAttention: row.lastTaskId
       ? needYouTaskIds.has(row.lastTaskId)
-      : false
+      : false,
+    lastTriggerFailed: lastTriggerProducedNoTask(row)
   }))
 }
 

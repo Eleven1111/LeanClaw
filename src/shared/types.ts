@@ -301,6 +301,8 @@ export interface ScheduleView {
   lastTaskCreatedAt: string | null
   lastTriggerSource: ScheduleTriggerSource | null
   lastTaskNeedsAttention: boolean
+  /** 上一次到期认领之后没有 Task 落地：触发失败，不是正常周期。 */
+  lastTriggerFailed: boolean
 }
 
 export type ScheduleTriggerSource = 'scheduled' | 'manual'

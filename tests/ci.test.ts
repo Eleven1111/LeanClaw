@@ -39,6 +39,7 @@ describe('remote CI contract', () => {
       'npm run typecheck',
       'npm test',
       'npm run migration:evidence',
+      'npm run parity:evidence',
       'npm run build'
     ]) {
       expect(workflow).toContain(`run: ${command}`)

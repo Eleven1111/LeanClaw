@@ -193,6 +193,7 @@ export function listTaskSummaries(): TaskSummaryView[] {
   const tasks = db
     .prepare(
       `SELECT t.id, t.goal, t.status, t.recipe_id AS recipeId,
+              t.input_path AS inputPath,
               t.project_id AS projectId, p.name AS projectName,
               t.agent_id AS agentId, t.agent_name_snapshot AS agentName,
               t.created_at AS createdAt, t.updated_at AS updatedAt
@@ -204,6 +205,7 @@ export function listTaskSummaries(): TaskSummaryView[] {
     goal: string
     status: InternalStatus
     recipeId: string
+    inputPath: string
     projectId: string | null
     projectName: string | null
     agentId: string | null
@@ -280,11 +282,14 @@ export function listTaskSummaries(): TaskSummaryView[] {
     const runId = runByTask.get(task.id)
     const progress = runId ? progressByRun.get(runId) : undefined
     const counts = runId ? countsByRun.get(runId) : undefined
+    const { inputPath, ...summarySource } = task
     return buildTaskSummary({
-      ...task,
+      ...summarySource,
       queuePosition: getQueuePosition(task.id),
       runningStepTitle: progress?.running ?? null,
-      lastDoneLabel: progress?.lastDone ?? null,
+      // 步骤说明可能含 Task 私有绝对路径。完整 TaskView 会脱敏，列表投影必须用同一规则，
+      // 否则同一行的文案会随它来自 listTasks 还是推送派生而不同。
+      lastDoneLabel: redactTaskPrivatePaths(progress?.lastDone ?? null, inputPath),
       modelCalls: counts?.modelCalls ?? 0,
       toolCalls: counts?.toolCalls ?? 0,
       deliverables: deliverablesByTask.get(task.id) ?? []
