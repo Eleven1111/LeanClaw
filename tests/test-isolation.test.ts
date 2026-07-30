@@ -67,9 +67,14 @@ describe('test isolation contract', () => {
     const scripts = JSON.parse(read('package.json')).scripts as Record<string, string>
     expect(scripts['migration:evidence']).toBe('node tests/migration-evidence.mjs')
     expect(scripts['parity:evidence']).toBe('node tests/summary-parity.mjs')
+    expect(scripts['verify:packaged']).toBe('node tests/packaged-verify.mjs')
 
     // 真实 SQLite 证据入口共用同一个启动器，隔离根由它统一安装并清理
-    for (const path of ['tests/runtime-smoke.mjs', 'tests/support/electron-evidence.mjs']) {
+    for (const path of [
+      'tests/runtime-smoke.mjs',
+      'tests/support/electron-evidence.mjs',
+      'tests/packaged-verify.mjs'
+    ]) {
       const entry = read(path)
       for (const key of ['LEANCLAW_TEST_ROOT', 'LEANCLAW_DATA_DIR', 'HOME', 'TMPDIR']) {
         expect(entry).toContain(key)

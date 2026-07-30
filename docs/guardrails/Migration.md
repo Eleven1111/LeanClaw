@@ -74,7 +74,7 @@ applies_to: sqlite-schema, migrations, indexes, historical-fixtures, recovery
 1. **`CREATE TABLE IF NOT EXISTS` 不会给旧表补列。** 新库 SCHEMA 通过不代表升级路径通过。
 2. **synthetic v8 不是 real fixture。** 当前 E2E 会按历史列定义重建 v8 表，无法证明未知索引、约束和真实数据组合可迁移。
 3. **当前 synthetic v8 降格不彻底。** 它只重建四张表，部分 v13 索引会从最初的新库残留，因此最终“索引存在”不能独立证明 v13 migration 创建了全部索引。
-4. **开发态迁移与 packaged migration 是两份证据。** 当前旧库升级由 `out/main/index.js` 执行，packaged smoke 只覆盖空库；不能合并表述成“最终产物旧库升级已验证”。
+4. **开发态迁移与 packaged migration 是两份证据。** 二者现在都有（开发态见 `t06-fixture-migration.spec.ts`，packaged 见 `npm run verify:packaged`），但仍分别陈述：packaged 证据依赖本机重新打包，每次引用都要重跑，不能用开发态结果替代。
 5. **高版本数据库必须失败关闭（T06 已修）。** 旧行为是 `pendingMigrations` 对更高版本返回空集合，旧程序会继续打开新库；现在抛 `schema-too-new`。
 6. **幂等测试不等于失败回滚测试。** 重复执行成功不能证明中途异常会整体回滚。T06 起 bootstrap 写入与全部 pending migration 同处一个事务，并有固定注入点的回滚证据。
 7. **`schema_version` 的单行性只由读取时校验强制。** 没有数据库级唯一/CHECK 约束（那需要新迁移）；`readSchemaVersion()` 拒绝多行、文本、负数与小数。
@@ -94,7 +94,8 @@ applies_to: sqlite-schema, migrations, indexes, historical-fixtures, recovery
 | [`tests/migration-evidence-scenarios.cjs`](../../tests/migration-evidence-scenarios.cjs) | 真实 SQLite：空库→v13、v12→v13、old-binary v8→v13、新库/升级库结构指纹对拍、未知对象保持、连续三次启动幂等、v14 拒绝、台账异常拒绝、0 行 bootstrap、固定注入点整体回滚、回滚后向前恢复 | 只覆盖 v8/v12/空库三个起点，未穷举 v1–v11 每个中间版本；不是 packaged binary |
 | [`tests/e2e/t06-fixture-migration.spec.ts`](../../tests/e2e/t06-fixture-migration.spec.ts) | 开发态 Electron：old-binary v8 → v13、行数与未知对象保持、索引与查询计划、迁移后真实 Task 主路径、重启 | 开发态入口 `out/main/index.js`，不是最终 `.app` |
 | [`tests/e2e/phase2-migration.spec.ts`](../../tests/e2e/phase2-migration.spec.ts) | 开发态 historical-schema v8 → v13、数据计数、NULL 历史字段、索引/查询计划、归档与重启 | 降格前创建的部分 v13 索引仍存在；不是 old-binary fixture；不是 packaged binary |
-| [`tests/phase2-packaged-smoke.mjs`](../../tests/phase2-packaged-smoke.mjs) | 最终包在空 data root 的主旅程 | 未预置旧数据库，不证明 packaged migration |
+| [`tests/phase2-packaged-smoke.mjs`](../../tests/phase2-packaged-smoke.mjs) | 最终包在指定 data root 的主旅程 | 自身不预置旧库；packaged migration 由 `verify:packaged` 组合完成 |
+| [`tests/packaged-verify.mjs`](../../tests/packaged-verify.mjs) | **packaged migration**：T06 old-binary v8 fixture 由最终 `.app` 升级到 v13，关键值与未知对象保持，升级后再跑完整 Journey A | 只覆盖 v8 一个起点与 arm64 ad-hoc 包；不进 CI，需本机重跑 |
 
 新增 migration 的最低证据集：
 
@@ -105,7 +106,7 @@ applies_to: sqlite-schema, migrations, indexes, historical-fixtures, recovery
 5. 行数、关键字段、版本、索引和查询计划断言；
 6. 新装与升级后的完整 schema fingerprint 对拍；
 7. 至少一个升级后真实 Task 主路径；
-8. 面向发布的迁移必须由最终 packaged binary 执行；
+8. 面向发布的迁移必须由最终 packaged binary 执行（`npm run verify:packaged`）；
 9. 当 old-binary/real fixture 尚不存在时，明确把结论降级为“开发态 synthetic fixture 通过”。
 
 ## 7. 决策日志
@@ -122,4 +123,5 @@ applies_to: sqlite-schema, migrations, indexes, historical-fixtures, recovery
 | 2026-07-30 | 版本台账单行性只在读取时校验，不加数据库约束 | 加唯一/CHECK 约束需要新迁移，超出 T06「不新增业务 Schema」的边界。 |
 | 2026-07-30 | 真实 SQLite 证据独立成 `npm run migration:evidence` | `better-sqlite3` 按 Electron ABI 编译，Vitest 无法加载，mock 无法证明事务回滚与结构对拍。 |
 | 2026-07-30 | v8 fixture 采用 old-binary 生成，保留 historical-schema E2E | 表结构由锚点提交自己的 `initDb()` 创建，可独立证明 13 个索引来自 v13 迁移；旧用例保留其归档与 UI 断言价值。 |
+| 2026-07-30 | packaged migration 用同一个 T06 fixture 验证，不另造夹具（T08） | 同一 checksum 让开发态与最终产物两份证据可以互相对照，差异只剩执行入口。 |
 | 2026-07-30 | 不启用 `PRAGMA foreign_keys = ON` | RED 证据未表明它是 T06 必需；启用属于语义迁移，需要独立任务与独立证据。 |

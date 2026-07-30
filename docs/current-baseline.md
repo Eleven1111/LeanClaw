@@ -4,7 +4,7 @@
 >
 > 刷新日期：2026-07-30
 >
-> 已验证代码基线：`main@16809b9`（T07 合并后）
+> 已验证代码基线：`codex/t08-packaged-artifact-verification`（基于 `main@6ddd873`）；远端门禁证据见 T08 PR
 >
 > 维护规则：代码、Schema、测试门禁、打包方式或已知边界变化时，必须在同一任务内刷新本文
 
@@ -55,7 +55,7 @@
 | 投影一致性 | 摘要两条派生路径由 `npm run parity:evidence` 逐字节对拍，共享同一脱敏规则 | [`tests/summary-parity-scenarios.cjs`](../tests/summary-parity-scenarios.cjs) |
 | 迁移证据 | old-binary v8 fixture + 13 个真实 SQLite 场景，独立入口 `npm run migration:evidence` | [`docs/guardrails/Migration.md`](./guardrails/Migration.md)、[`tests/fixtures/migrations/v8-old-binary/README.md`](../tests/fixtures/migrations/v8-old-binary/README.md) |
 | 打包目标 | macOS arm64，目录包、DMG、ZIP | [`package.json`](../package.json#L8) |
-| 签名状态 | `identity: "-"`、`hardenedRuntime: false`，属于 ad-hoc 本机产物 | [`package.json`](../package.json#L65) |
+| 签名状态 | `identity: "-"`、`hardenedRuntime: false`，electron-builder 日志明确 `skipped macOS notarization`，属于 ad-hoc 本机产物 | [`package.json`](../package.json#L65) |
 | 远端 CI | PR/main workflow 已实现；Node 24.18.0、macOS arm64、Quality（含迁移证据）与 Electron E2E 分层 | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)、[`docs/ci.md`](./ci.md) |
 
 ## 4. 当前验证状态
@@ -74,10 +74,26 @@
 | Production build | `npm run build` | PASS |
 | Runtime smoke | `npm run smoke` | 独立临时根内 `delivered`，退出后无残留 |
 | Electron E2E | `npm run e2e` | 受控 GUI 权限下 **46/46 PASS** |
+| 最终产物验证 | `npm run dist:mac` + `npm run verify:packaged` | **10/10 OK**（含 packaged migration） |
 
 `npm ci` 干净安装预演是 2026-07-29 T05 轮的证据（Node 23.6.0 arm64），本轮未重跑；依赖未变更。
 
-### 4.2 最近一次仓库完整证据
+### 4.2 最终产物（2026-07-30 重新打包）
+
+| 项目 | 事实 |
+|---|---|
+| 产物 | `release/LeanClaw-0.1.0-arm64.dmg`、`release/LeanClaw-0.1.0-arm64.zip`（本轮重新生成，脚本拒绝旧包） |
+| DMG SHA-256 | `9006f9b11702f1f3676cb95ca1bcaf5fcc4b6ed4017f4049c292300af832ed9d` |
+| ZIP SHA-256 | `b98da328194d97dd3c85febdef57e22d1874d4b6f310d26eabfacf4bc90f7cdd` |
+| 版本 / Bundle ID | `0.1.0` / `com.leanclaw.desktop` |
+| Electron / native | `43.1.0` / `better_sqlite3.node` arm64（已 unpack） |
+| 签名 | `codesign --verify --deep --strict` 通过，`Signature=adhoc`，未公证 |
+| 空库首启 | `schema_version=13`，packaged Journey A `delivered`，`runtimeRuns=1` |
+| packaged migration | T06 old-binary v8 fixture → v13，关键值与未知对象保持，升级后 Journey A `delivered` |
+
+状态是 `Packaged smoke pass`，**不是** `Release ready` 或 `Shipped`。
+
+### 4.3 最近一次仓库完整证据
 
 [审计与交接.md 记录 AU](./审计与交接.md#L762) 记录的最近一次完整验证包括：
 
@@ -108,7 +124,7 @@ T06 已用 old-binary v8 fixture 补齐迁移证据：13 个真实 SQLite 场景
 
 | 优先级 | 缺口 | 当前边界 |
 |---:|---|---|
-| P0 | packaged `.app` 的旧库升级未验证 | T06 只覆盖开发态入口 `out/main/index.js`；最终产物迁移属于 T08 |
+| 条件式 | packaged 产物只在本机 arm64、ad-hoc 签名下验证 | T08 已用 T06 fixture 证明最终 `.app` 的 v8→v13 升级；未在其它机器/账号验证 Gatekeeper，未构建 x64/universal |
 | P1 | Automation「认领先推进、失败不回滚」是刻意保留的语义 | T07 已在真实 Runtime 注入 DB 故障验证：不假成功、不重复、不静默跳过；回退 `next_run_at` 会把坏计划变成每 tick 热重试，因此保持不回退，改为在卡片上显示「触发失败」 |
 | P1 | Provider/Model/Tool/MCP/Shell/Scheduler 缺少统一能力与错误契约 | 已有 Runtime Center、Provider 测试和诊断导出，不应重建平行页面 |
 | P1 | 模型 primary/fallback 缺少结构化错误语义 | fallback 双失败时用户无法看到完整因果链 |
@@ -155,9 +171,11 @@ npx playwright test --list
 ```bash
 npm run e2e
 # s1–s18 逐条命令以 docs/审计与交接.md 的当前回归命令为准
-npm run dist:mac
-# 对刚生成的最终产物重新执行签名、DMG/ZIP 和 packaged journey 校验
+rm -rf release && npm run dist:mac
+npm run verify:packaged
 ```
+
+`verify:packaged` 会拒绝比源码更旧的产物，并把签名、DMG/ZIP 完整性、SHA-256、空库首启 Journey 与 packaged migration 一次跑完。
 
 所有测试必须使用受限的临时 HOME/`LEANCLAW_DATA_DIR`，自动测试不得读取、复制或修改真实用户 DB、凭据和工作区。
 

@@ -18,6 +18,7 @@
     "smoke": "node tests/runtime-smoke.mjs",
     "migration:evidence": "node tests/migration-evidence.mjs",
     "parity:evidence": "node tests/summary-parity.mjs",
+    "verify:packaged": "node tests/packaged-verify.mjs",
     "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
