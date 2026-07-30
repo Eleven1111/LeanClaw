@@ -21,6 +21,8 @@
 |---|---|---|---|---|
 | `leanclaw-codepilot-optimization` | [CodePilot 借鉴分析与 LeanClaw 优化提升执行方案](./active/CodePilot借鉴分析与LeanClaw优化执行方案.md) | P1 / T06 | T05 已关闭；T06 可领取 | P0 已验收；CP1 尚未验收 |
 
+当前执行交接：[LeanClaw 后续任务交接 - Claude 执行说明](../Claude后续任务交接.md)。
+
 ## 3. 领取前检查
 
 1. 阅读 [../current-baseline.md](../current-baseline.md)；

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { MIGRATIONS, pendingMigrations, type Migration } from '../src/runtime/db'
+import {
+  LATEST_SCHEMA_VERSION,
+  MIGRATIONS,
+  MigrationError,
+  pendingMigrations,
+  readSchemaVersion,
+  type Migration
+} from '../src/runtime/db'
 
 const noop = (): void => undefined
 
@@ -14,10 +21,28 @@ describe('pendingMigrations（迁移框架）', () => {
     expect(pending.map((m) => m.version)).toEqual([2, 3])
   })
 
-  it('current 大于等于全部版本时返回空数组', () => {
+  it('current 等于最高版本时返回空数组', () => {
     const migrations: Migration[] = [{ version: 1, up: noop }, { version: 2, up: noop }]
     expect(pendingMigrations(2, migrations)).toEqual([])
-    expect(pendingMigrations(5, migrations)).toEqual([])
+  })
+
+  // T06 契约变更：旧行为对更高版本返回空数组，旧程序会继续打开新库。
+  it('current 高于最高版本时失败关闭，而不是返回空数组', () => {
+    const migrations: Migration[] = [{ version: 1, up: noop }, { version: 2, up: noop }]
+    let error: unknown
+    try {
+      pendingMigrations(5, migrations)
+    } catch (caught) {
+      error = caught
+    }
+    expect(error).toBeInstanceOf(MigrationError)
+    expect((error as MigrationError).code).toBe('schema-too-new')
+    expect((error as MigrationError).message).toContain('schema_version=5')
+  })
+
+  it('LATEST_SCHEMA_VERSION 与已发布迁移的最高版本一致', () => {
+    expect(LATEST_SCHEMA_VERSION).toBe(13)
+    expect(LATEST_SCHEMA_VERSION).toBe(Math.max(...MIGRATIONS.map((m) => m.version)))
   })
 
   it('current 为 0 时返回全部迁移', () => {
@@ -144,5 +169,46 @@ describe('pendingMigrations（迁移框架）', () => {
       'ALTER TABLE tasks ADD COLUMN schedule_trigger_source TEXT'
     ])
     expect(statements.every((statement) => !/DEFAULT|UPDATE/i.test(statement))).toBe(true)
+  })
+})
+
+describe('readSchemaVersion（版本台账）', () => {
+  const ledger = (rows: { version: unknown }[]): never =>
+    ({ prepare: () => ({ all: () => rows }) }) as never
+
+  it('恰好一行非负整数时返回该版本', () => {
+    expect(readSchemaVersion(ledger([{ version: 8 }]))).toBe(8)
+    expect(readSchemaVersion(ledger([{ version: 0 }]))).toBe(0)
+  })
+
+  it('多于一行时失败关闭，不用 LIMIT 1 随机选中一行', () => {
+    expect(() => readSchemaVersion(ledger([{ version: 8 }, { version: 13 }]))).toThrow(
+      MigrationError
+    )
+    try {
+      readSchemaVersion(ledger([{ version: 8 }, { version: 13 }]))
+    } catch (error) {
+      expect((error as MigrationError).code).toBe('ledger-not-single-row')
+    }
+  })
+
+  it('0 行时同样交给调用方 bootstrap，不冒充版本 0', () => {
+    try {
+      readSchemaVersion(ledger([]))
+    } catch (error) {
+      expect((error as MigrationError).code).toBe('ledger-not-single-row')
+    }
+  })
+
+  it('非整数、负数或不可解析版本号失败关闭', () => {
+    for (const version of ['not-a-version', -1, 12.5, null, undefined]) {
+      let code: string | undefined
+      try {
+        readSchemaVersion(ledger([{ version }]))
+      } catch (error) {
+        code = (error as MigrationError).code
+      }
+      expect(code).toBe('ledger-invalid-version')
+    }
   })
 })

@@ -247,6 +247,27 @@ export interface Migration {
   up(database: Database.Database): void
 }
 
+export type MigrationErrorCode =
+  | 'schema-too-new'
+  | 'ledger-not-single-row'
+  | 'ledger-invalid-version'
+
+/** 迁移框架的失败关闭信号：带稳定错误码，便于上层区分“拒绝打开”与普通 SQL 故障。 */
+export class MigrationError extends Error {
+  readonly code: MigrationErrorCode
+
+  constructor(code: MigrationErrorCode, message: string) {
+    super(message)
+    this.name = 'MigrationError'
+    this.code = code
+  }
+}
+
+/** 只执行最新 SCHEMA，不执行任何 migration。新库与迁移证据夹具共用同一入口。 */
+export function createSchema(database: Database.Database): void {
+  database.exec(SCHEMA)
+}
+
 function hasColumn(database: Database.Database, table: string, column: string): boolean {
   const cols = database.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]
   return cols.some((c) => c.name === column)
@@ -446,6 +467,11 @@ export const MIGRATIONS: Migration[] = [
   }
 ]
 
+export const LATEST_SCHEMA_VERSION = MIGRATIONS.reduce(
+  (latest, migration) => Math.max(latest, migration.version),
+  0
+)
+
 export function pendingMigrations(current: number, migrations: Migration[]): Migration[] {
   const sorted = [...migrations].sort((a, b) => a.version - b.version)
   for (let i = 1; i < sorted.length; i++) {
@@ -455,41 +481,87 @@ export function pendingMigrations(current: number, migrations: Migration[]): Mig
       )
     }
   }
+  // 失败关闭：旧程序遇到更高版本的数据库时不能当作“无待迁移项”静默继续打开。
+  const latest = sorted.length ? sorted[sorted.length - 1].version : 0
+  if (current > latest) {
+    throw new MigrationError(
+      'schema-too-new',
+      `数据库 schema_version=${current} 高于当前程序支持的最高迁移版本 ${latest}，拒绝继续打开`
+    )
+  }
   return sorted.filter((m) => m.version > current)
 }
 
-function getSchemaVersion(database: Database.Database): number {
-  const row = database.prepare('SELECT version FROM schema_version LIMIT 1').get() as
-    | { version: number }
-    | undefined
-  return row?.version ?? 0
+/**
+ * 严格读取版本台账。`schema_version` 没有数据库级唯一约束，因此单行性、整数性和
+ * 非负性都在读取时强制；不再用 `LIMIT 1` 在多行里随机选中一行。
+ */
+export function readSchemaVersion(database: Database.Database): number {
+  const rows = database.prepare('SELECT version FROM schema_version').all() as {
+    version: unknown
+  }[]
+  if (rows.length !== 1) {
+    throw new MigrationError(
+      'ledger-not-single-row',
+      `schema_version 必须恰好一行，实际为 ${rows.length} 行，拒绝继续打开`
+    )
+  }
+  const version = rows[0].version
+  if (typeof version !== 'number' || !Number.isInteger(version) || version < 0) {
+    throw new MigrationError(
+      'ledger-invalid-version',
+      `schema_version 必须是非负整数，实际为 ${JSON.stringify(version)}，拒绝继续打开`
+    )
+  }
+  return version
 }
 
-function runMigrations(database: Database.Database): void {
-  const count = database.prepare('SELECT COUNT(*) c FROM schema_version').get() as { c: number }
-  if (count.c === 0) database.prepare('INSERT INTO schema_version (version) VALUES (0)').run()
-  const pending = pendingMigrations(getSchemaVersion(database), MIGRATIONS)
-  if (pending.length === 0) return
+/**
+ * 迁移应用边界。bootstrap 写入与全部 pending migration 在同一事务内完成，
+ * 任一步骤失败即整体回滚；不提供降级迁移，失败恢复是回滚后向前修复。
+ */
+export function applyMigrations(
+  database: Database.Database,
+  migrations: Migration[] = MIGRATIONS
+): number {
+  const ledgerRows = (
+    database.prepare('SELECT COUNT(*) c FROM schema_version').get() as { c: number }
+  ).c
+  const current = ledgerRows === 0 ? 0 : readSchemaVersion(database)
+  const pending = pendingMigrations(current, migrations)
+  if (ledgerRows === 1 && pending.length === 0) return current
+
   const txn = database.transaction(() => {
-    for (const m of pending) {
-      m.up(database)
-      database.prepare('UPDATE schema_version SET version = ?').run(m.version)
+    if (ledgerRows === 0) {
+      database.prepare('INSERT INTO schema_version (version) VALUES (0)').run()
+    }
+    for (const migration of pending) {
+      migration.up(database)
+      database.prepare('UPDATE schema_version SET version = ?').run(migration.version)
     }
   })
   txn()
+  return readSchemaVersion(database)
 }
 
 export function initDb(dir: string): Database.Database {
-  dataDir = dir
   mkdirSync(dir, { recursive: true })
   const ws = join(dir, 'workspace')
   mkdirSync(ws, { recursive: true })
   const sample = join(ws, 'notes.md')
   if (!existsSync(sample)) writeFileSync(sample, SAMPLE_NOTES, 'utf8')
-  db = new Database(join(dir, 'leanclaw.db'))
-  db.pragma('journal_mode = WAL')
-  db.exec(SCHEMA)
-  runMigrations(db)
+  const opened = new Database(join(dir, 'leanclaw.db'))
+  try {
+    opened.pragma('journal_mode = WAL')
+    createSchema(opened)
+    applyMigrations(opened)
+  } catch (error) {
+    // 失败关闭：半成品连接不得成为 getDb() 的返回值，否则调用方会把拒绝当成成功。
+    opened.close()
+    throw error
+  }
+  db = opened
+  dataDir = dir
   return db
 }
 

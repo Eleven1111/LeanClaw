@@ -1,7 +1,7 @@
 ---
 guardrail_id: migration
 status: active
-last_verified: 2026-07-29
+last_verified: 2026-07-30
 applies_to: sqlite-schema, migrations, indexes, historical-fixtures, recovery
 ---
 
@@ -14,7 +14,8 @@ applies_to: sqlite-schema, migrations, indexes, historical-fixtures, recovery
 | SCHEMA | 新数据库启动时执行的最新表、索引和触发器定义。 |
 | migration | 使既有数据库从较低 `schema_version` 前进到更高版本的有序变更。 |
 | schema_version | `metadata` 中记录的已应用版本；当前代码基线为 v13。 |
-| synthetic fixture | 测试按历史列结构重建的旧库，不是来自真实历史产物。 |
+| synthetic historical-schema fixture | 测试按历史列结构重建的旧库，不是来自真实历史产物。 |
+| synthetic old-binary fixture | 表结构由旧版程序自己的 `initDb()` 创建、数据行为公开合成常量的旧库。 |
 | real historical fixture | 由旧版 LeanClaw 实际生成、离线脱敏并经授权保存的测试数据库。 |
 | conservative backfill | 不为未知历史事实编造值；优先 nullable、可证明默认值或运行时回退。 |
 | isolated data root | 测试专用临时 `LEANCLAW_DATA_DIR` / HOME，禁止接触真实用户数据库。 |
@@ -33,7 +34,11 @@ applies_to: sqlite-schema, migrations, indexes, historical-fixtures, recovery
 | fixture 来源可追溯 | synthetic 与 real fixture 必须明确标注，不能把按结构重建的测试库当成真实历史证据。 |
 | 启动顺序稳定 | 数据库初始化和迁移完成后，才执行重启恢复与 Runtime 服务逻辑。 |
 | 约束声明不等于已启用 | SQLite 外键声明只有在连接启用 `PRAGMA foreign_keys = ON` 后才强制；当前不能宣称外键已被运行时执行。 |
-| 新版本库必须失败关闭 | 应用版本低于数据库版本时不得静默继续；当前实现尚未满足，修改迁移框架时必须优先补齐。 |
+| 新版本库必须失败关闭 | 应用版本低于数据库版本时不得静默继续。由 `pendingMigrations()` 抛 `MigrationError('schema-too-new')` 满足。 |
+| 版本台账恰好一行 | `schema_version` 必须恰好一行非负整数；多行、文本、负数、小数在读取时一律拒绝继续。 |
+| SCHEMA 不等于最新结构 | 最新结构 = SCHEMA + v1–v13 全部迁移。只执行 SCHEMA 得到的库是不可用的（如 `tasks.schedule_id` 只由 v7 添加）。 |
+| 失败不发布半成品 | `initDb()` 只在迁移成功后发布模块级连接与 data dir；失败时关闭连接并抛出，`getDb()` 不得拿到被拒绝的数据库。 |
+| 未知对象不得删除 | 迁移不得删除或改写当前代码不认识但合法存在的表、索引与触发器。 |
 
 ## 3. 关键文件与责任
 
@@ -42,7 +47,11 @@ applies_to: sqlite-schema, migrations, indexes, historical-fixtures, recovery
 | [`src/runtime/db.ts`](../../src/runtime/db.ts) | 最新 SCHEMA、v1–v13 migration、排序校验、事务应用和数据库初始化。 |
 | [`src/runtime/index.ts`](../../src/runtime/index.ts) | 选择 data root，先初始化数据库再执行恢复。 |
 | [`src/main/index.ts`](../../src/main/index.ts) | E2E/测试可通过 `LEANCLAW_DATA_DIR` 隔离 Electron userData。 |
-| [`tests/db.test.ts`](../../tests/db.test.ts) | migration 顺序、连续性、幂等、v11/v12 历史值与 v13 索引。 |
+| [`tests/db.test.ts`](../../tests/db.test.ts) | migration 顺序、连续性、幂等、v11/v12 历史值、v13 索引与版本台账校验（mock 数据库）。 |
+| [`tests/migration-evidence.mjs`](../../tests/migration-evidence.mjs) | 真实 SQLite 证据入口：建隔离根、打包被测源码、在 Electron 下运行场景集。 |
+| [`tests/migration-evidence-scenarios.cjs`](../../tests/migration-evidence-scenarios.cjs) | 13 个真实 SQLite 场景：升级、指纹对拍、未知对象、重复启动、失败关闭、事务回滚。 |
+| [`tests/fixtures/migrations/v8-old-binary/`](../../tests/fixtures/migrations/v8-old-binary/README.md) | old-binary v8 fixture、生成脚本与 manifest。 |
+| [`tests/e2e/t06-fixture-migration.spec.ts`](../../tests/e2e/t06-fixture-migration.spec.ts) | 开发态 Electron 用 old-binary fixture 升级，并跑迁移后真实 Task 主路径。 |
 | [`tests/e2e/phase2-migration.spec.ts`](../../tests/e2e/phase2-migration.spec.ts) | synthetic v8 → v13 升级、数据保留、索引和重启主路径。 |
 | [`docs/current-baseline.md`](../current-baseline.md) | 当前 Schema 和验证证据的唯一简明入口。 |
 
@@ -66,20 +75,25 @@ applies_to: sqlite-schema, migrations, indexes, historical-fixtures, recovery
 2. **synthetic v8 不是 real fixture。** 当前 E2E 会按历史列定义重建 v8 表，无法证明未知索引、约束和真实数据组合可迁移。
 3. **当前 synthetic v8 降格不彻底。** 它只重建四张表，部分 v13 索引会从最初的新库残留，因此最终“索引存在”不能独立证明 v13 migration 创建了全部索引。
 4. **开发态迁移与 packaged migration 是两份证据。** 当前旧库升级由 `out/main/index.js` 执行，packaged smoke 只覆盖空库；不能合并表述成“最终产物旧库升级已验证”。
-5. **高版本数据库当前不会失败关闭。** `pendingMigrations` 对高于当前版本的数据库返回空集合，旧程序可能继续打开新库。
-6. **幂等测试不等于失败回滚测试。** 重复执行成功不能证明中途异常会整体回滚；SCHEMA 与 version=0 初始化也位于 migration transaction 之外。
-7. **`schema_version` 的单行真实性未由约束保证。** 当前读取 `LIMIT 1`、更新全部行，缺少唯一性和范围约束。
-8. **nullable 历史字段不是缺陷。** 无法证明 actor/source 时，`NULL` 比伪造更可信。
-9. **声明 Foreign Key 不等于运行时强制。** 当前初始化未确认启用 `PRAGMA foreign_keys = ON`。
-10. **版本号通过不等于数据语义正确。** 需要行数、关键字段、完整 schema fingerprint、索引和实际查询路径证据。
-11. **测试隔离不是一句约定。** 必须显式使用临时 data root，不能对真实 `~/.leanclaw` 做读取、复制或 hash 来声称“未访问”。
+5. **高版本数据库必须失败关闭（T06 已修）。** 旧行为是 `pendingMigrations` 对更高版本返回空集合，旧程序会继续打开新库；现在抛 `schema-too-new`。
+6. **幂等测试不等于失败回滚测试。** 重复执行成功不能证明中途异常会整体回滚。T06 起 bootstrap 写入与全部 pending migration 同处一个事务，并有固定注入点的回滚证据。
+7. **`schema_version` 的单行性只由读取时校验强制。** 没有数据库级唯一/CHECK 约束（那需要新迁移）；`readSchemaVersion()` 拒绝多行、文本、负数与小数。
+8. **只跑 SCHEMA 得不到可用的最新库。** `tasks.schedule_id` 等列只由迁移添加；构造 N-1 夹具必须是 SCHEMA + v1–v(N-1)，否则 v13 会报 `no such column`。
+9. **Node 下不能用真实 SQLite 做单测。** `better-sqlite3` 按 Electron ABI 编译，Vitest 只能 mock；真实 SQLite 断言走 `npm run migration:evidence`。
+10. **nullable 历史字段不是缺陷。** 无法证明 actor/source 时，`NULL` 比伪造更可信。
+11. **声明 Foreign Key 不等于运行时强制。** 当前初始化未启用 `PRAGMA foreign_keys = ON`。
+12. **版本号通过不等于数据语义正确。** 需要行数、关键字段、完整 schema fingerprint、索引和实际查询路径证据。
+13. **测试隔离不是一句约定。** 必须显式使用临时 data root，不能对真实 `~/.leanclaw` 做读取、复制或 hash 来声称“未访问”。
+14. **未知对象"还在"不等于"还能用"。** 升级后要同时验证它保留且仍然生效（T06 的未知触发器在新 Task 更新时仍然写入审计表）。
 
 ## 6. 测试覆盖映射
 
 | 测试 | 已覆盖 | 当前缺口 |
 |---|---|---|
-| [`tests/db.test.ts`](../../tests/db.test.ts) | 版本排序、重复/非递增拒绝、连续 v1–v13、v13 索引与幂等、v11/v12 不伪造历史值 | 缺 migration 中途失败的整体回滚；缺新库与升级库完整 schema 对拍 |
-| [`tests/e2e/phase2-migration.spec.ts`](../../tests/e2e/phase2-migration.spec.ts) | 开发态 synthetic v8 → v13、数据计数、NULL 历史字段、索引/查询计划、升级后运行和重启 | 降格前创建的部分 v13 索引仍存在；不是 old-binary/real fixture；不是 packaged binary |
+| [`tests/db.test.ts`](../../tests/db.test.ts) | 版本排序、重复/非递增拒绝、连续 v1–v13、v13 索引与幂等、v11/v12 不伪造历史值、`schema-too-new` 与版本台账校验 | 全部基于 mock 数据库，不触达真实 SQLite 行为 |
+| [`tests/migration-evidence-scenarios.cjs`](../../tests/migration-evidence-scenarios.cjs) | 真实 SQLite：空库→v13、v12→v13、old-binary v8→v13、新库/升级库结构指纹对拍、未知对象保持、连续三次启动幂等、v14 拒绝、台账异常拒绝、0 行 bootstrap、固定注入点整体回滚、回滚后向前恢复 | 只覆盖 v8/v12/空库三个起点，未穷举 v1–v11 每个中间版本；不是 packaged binary |
+| [`tests/e2e/t06-fixture-migration.spec.ts`](../../tests/e2e/t06-fixture-migration.spec.ts) | 开发态 Electron：old-binary v8 → v13、行数与未知对象保持、索引与查询计划、迁移后真实 Task 主路径、重启 | 开发态入口 `out/main/index.js`，不是最终 `.app` |
+| [`tests/e2e/phase2-migration.spec.ts`](../../tests/e2e/phase2-migration.spec.ts) | 开发态 historical-schema v8 → v13、数据计数、NULL 历史字段、索引/查询计划、归档与重启 | 降格前创建的部分 v13 索引仍存在；不是 old-binary fixture；不是 packaged binary |
 | [`tests/phase2-packaged-smoke.mjs`](../../tests/phase2-packaged-smoke.mjs) | 最终包在空 data root 的主旅程 | 未预置旧数据库，不证明 packaged migration |
 
 新增 migration 的最低证据集：
@@ -104,3 +118,8 @@ applies_to: sqlite-schema, migrations, indexes, historical-fixtures, recovery
 | 2026-07-29 | 外键执行状态保持 Unknown/未启用声明 | 当前未发现初始化连接显式开启 `PRAGMA foreign_keys = ON`。 |
 | 2026-07-29 | 将开发态迁移与 packaged migration 分开陈述 | 两条测试当前覆盖不同 data root 和启动入口，证据不能合并。 |
 | 2026-07-29 | 将高版本库 fail-closed 与 schema ledger 约束列为未满足不变量 | 当前实现会对高版本返回无待迁移项，且版本表未保证恰好一行。 |
+| 2026-07-30 | 高版本库与版本台账异常改为失败关闭（T06） | RED 证据显示旧实现对 v14 库、多行/文本/负数/小数台账都不抛错，直接继续打开。 |
+| 2026-07-30 | 版本台账单行性只在读取时校验，不加数据库约束 | 加唯一/CHECK 约束需要新迁移，超出 T06「不新增业务 Schema」的边界。 |
+| 2026-07-30 | 真实 SQLite 证据独立成 `npm run migration:evidence` | `better-sqlite3` 按 Electron ABI 编译，Vitest 无法加载，mock 无法证明事务回滚与结构对拍。 |
+| 2026-07-30 | v8 fixture 采用 old-binary 生成，保留 historical-schema E2E | 表结构由锚点提交自己的 `initDb()` 创建，可独立证明 13 个索引来自 v13 迁移；旧用例保留其归档与 UI 断言价值。 |
+| 2026-07-30 | 不启用 `PRAGMA foreign_keys = ON` | RED 证据未表明它是 T06 必需；启用属于语义迁移，需要独立任务与独立证据。 |
