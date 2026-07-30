@@ -4,7 +4,7 @@
 >
 > 刷新日期：2026-07-30
 >
-> 已验证代码基线：`main@490205f`（T08 合并后）
+> 已验证代码基线：`codex/t09-dependency-risk-refresh`（基于 `main@696331b`）；远端门禁证据见 T09 PR
 >
 > 维护规则：代码、Schema、测试门禁、打包方式或已知边界变化时，必须在同一任务内刷新本文
 
@@ -56,6 +56,7 @@
 | 迁移证据 | old-binary v8 fixture + 13 个真实 SQLite 场景，独立入口 `npm run migration:evidence` | [`docs/guardrails/Migration.md`](./guardrails/Migration.md)、[`tests/fixtures/migrations/v8-old-binary/README.md`](../tests/fixtures/migrations/v8-old-binary/README.md) |
 | 打包目标 | macOS arm64，目录包、DMG、ZIP | [`package.json`](../package.json#L8) |
 | 签名状态 | `identity: "-"`、`hardenedRuntime: false`，electron-builder 日志明确 `skipped macOS notarization`，属于 ad-hoc 本机产物 | [`package.json`](../package.json#L65) |
+| 依赖 | 直接生产依赖仅 `@modelcontextprotocol/sdk` 与 `better-sqlite3`；`overrides` 把 `@hono/node-server` 顶到已修复的 `^2.0.5` | [`docs/dependency-risk.md`](./dependency-risk.md) |
 | 远端 CI | PR/main workflow 已实现；Node 24.18.0、macOS arm64、Quality（含迁移证据）与 Electron E2E 分层 | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)、[`docs/ci.md`](./ci.md) |
 
 ## 4. 当前验证状态
@@ -78,13 +79,13 @@
 
 `npm ci` 干净安装预演是 2026-07-29 T05 轮的证据（Node 23.6.0 arm64），本轮未重跑；依赖未变更。
 
-### 4.2 最终产物（2026-07-30 重新打包）
+### 4.2 最终产物（2026-07-30 依赖变更后重新打包）
 
 | 项目 | 事实 |
 |---|---|
 | 产物 | `release/LeanClaw-0.1.0-arm64.dmg`、`release/LeanClaw-0.1.0-arm64.zip`（本轮重新生成，脚本拒绝旧包） |
-| DMG SHA-256 | `9006f9b11702f1f3676cb95ca1bcaf5fcc4b6ed4017f4049c292300af832ed9d` |
-| ZIP SHA-256 | `b98da328194d97dd3c85febdef57e22d1874d4b6f310d26eabfacf4bc90f7cdd` |
+| DMG SHA-256 | `27ddfb227ea0b30be88e5a0a70a59472be2d39fb2beed2a8ad5d31980403951c` |
+| ZIP SHA-256 | `fdefecd6c4bdfef56fa14a3fc65bc50c9d4bbc24611ee620b0688219b117860f` |
 | 版本 / Bundle ID | `0.1.0` / `com.leanclaw.desktop` |
 | Electron / native | `43.1.0` / `better_sqlite3.node` arm64（已 unpack） |
 | 签名 | `codesign --verify --deep --strict` 通过，`Signature=adhoc`，未公证 |
@@ -134,7 +135,7 @@ T06 已用 old-binary v8 fixture 补齐迁移证据：13 个真实 SQLite 场景
 | P1 | 高版本库失败关闭缺少面向用户的解释 | 数据库层已拒绝并抛 `schema-too-new`，但 Runtime 会因此启动失败退出；解释性 UI 属于 P2 Runtime Doctor |
 | P1 | `schema_version` 单行性无数据库级约束 | 由 `readSchemaVersion()` 读取时强制；加约束需要新迁移 |
 | P1 | 迁移起点只覆盖空库、v8 与 v12 | 未穷举 v1–v11 每个中间版本 |
-| 动态 | 依赖 advisory 会随时间变化 | 必须联网刷新并按生产可达性、非降级修复和缓解措施判断 |
+| 动态 | 依赖 advisory 会随时间变化 | T09 已于 2026-07-30 刷新：生产树 `npm audit --omit=dev` 为 0；保留的 `brace-expansion` 属构建期不可达，复查日期 2026-08-30，详见 [dependency-risk.md](./dependency-risk.md) |
 
 ## 7. 当前非目标
 

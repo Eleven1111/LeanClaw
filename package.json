@@ -22,7 +22,7 @@
     "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "better-sqlite3": "^12.11.1"
   },
   "devDependencies": {
@@ -76,5 +76,8 @@
         "zip"
       ]
     }
+  },
+  "overrides": {
+    "@hono/node-server": "^2.0.5"
   }
 }
