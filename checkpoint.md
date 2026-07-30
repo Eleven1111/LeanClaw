@@ -2,7 +2,7 @@
 
 > 分支：`codex/t07-fault-path-coverage`（基于 `main@7b62f68`）
 >
-> 更新时间：2026-07-30（T06 已关闭并合并；T07 工程完成，待远端门禁）
+> 更新时间：2026-07-30（T06、T07 已关闭并合并；执行指针 T08）
 
 ## 任务边界（本任务只做这些）
 
@@ -42,6 +42,6 @@
 | C | Automation 真实 Runtime DB 故障注入 E2E | done — `tests/e2e/t07-automation-fault.spec.ts` |
 | D | 失败可见性（`lastTriggerFailed` + 卡片文案） | done — `src/shared/schedule.ts`、`api.ts`、`Automations.tsx` |
 | E | 验证矩阵 | done — static 22/22、unit 367/367、migration 13/13、parity 5/5、E2E 46/46 |
-| F | 文档 + PR | in_progress |
+| F | 文档 + PR | done — [PR #8](https://github.com/Eleven1111/LeanClaw/pull/8) 两个 Required Checks 全绿并 squash merge 为 `main@16809b9` |
 
 T07 的裁决：「认领先推进、失败不回滚 `next_run_at`」保持不变（回退会导致热重试），改为在 UI 上显式报告触发失败。

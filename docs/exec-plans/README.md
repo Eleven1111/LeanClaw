@@ -19,7 +19,7 @@
 
 | Plan ID | 计划 | 当前阶段/任务 | 工程状态 | 用户状态 |
 |---|---|---|---|---|
-| `leanclaw-codepilot-optimization` | [CodePilot 借鉴分析与 LeanClaw 优化提升执行方案](./active/CodePilot借鉴分析与LeanClaw优化执行方案.md) | P1 / T07 | T06 已关闭；T07 可领取 | P0 已验收；CP1 尚未验收 |
+| `leanclaw-codepilot-optimization` | [CodePilot 借鉴分析与 LeanClaw 优化提升执行方案](./active/CodePilot借鉴分析与LeanClaw优化执行方案.md) | P1 / T08 | T07 已关闭；T08 可领取 | P0 已验收；CP1 尚未验收 |
 
 当前执行交接：[LeanClaw 后续任务交接 - Claude 执行说明](../Claude后续任务交接.md)。
 
