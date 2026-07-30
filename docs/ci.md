@@ -63,7 +63,7 @@ Checkout 关闭 `persist-credentials`；GitHub 官方 Action 使用审核过的�
 - CI 设置 Playwright `forbidOnly` 且不重试，误提交 `test.only` 或首次失败不会被静默掩盖；
 - 本 job 启动的是 `out/main/index.js`，因此只能证明开发态 Electron；
 - `npm run build` 只生成 production bundle，不生成 `.app`、DMG 或 ZIP；
-- 最终 `.app`/ZIP、签名、DMG、packaged Journey A 和历史数据库升级属于 T08，不进入本次 PR/main 必要门；
+- 最终 `.app`/ZIP、签名、DMG、packaged Journey A 和 packaged migration 由本机 `npm run verify:packaged` 覆盖（T08 已完成），**不进入** PR/main 必要门：它需要真实 `dist:mac`，而 CI 刻意不跑打包；
 - 因此两个 CI job 通过后，只能写 `Tests pass` / `Electron E2E pass`，不能写 `Packaged smoke pass`、`Release ready` 或 `Shipped`。
 
 ## 6. 本地等价命令
