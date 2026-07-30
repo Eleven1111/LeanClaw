@@ -4,14 +4,14 @@ status: active
 created_at: 2026-07-29
 updated_at: 2026-07-30
 current_phase: P1
-current_task: T09
+current_task: CP1
 engineering_status: in_progress
 user_approval: approved
 ---
 
 # CodePilot 借鉴分析与 LeanClaw 优化提升执行方案
 
-> 文档状态：P0 已于 2026-07-29 通过用户验收；P1 / T04–T08 已完成并关闭，执行指针移到 T09
+> 文档状态：P0 已于 2026-07-29 通过用户验收；P1 / T04–T09 已完成并关闭，CP1 工程裁决 accepted，等待用户验收
 >
 > 创建日期：2026-07-29
 >
@@ -315,7 +315,9 @@ T07 已完成并关闭：新增 `npm run parity:evidence`（与迁移证据共�
 
 T08 已完成并关闭：新增受控 launcher `tests/packaged-verify.mjs`（`npm run verify:packaged`），先 `rm -rf release && npm run dist:mac` 重新生成产物，脚本用 `find -newer` 拒绝比源码更旧的包，被验证的二进制取自**解压后的 ZIP**，隔离根在启动 packaged app 之前安装。台账 10/10：产物新鲜度、DMG `hdiutil verify` + SHA-256 `9006f9b1…`、ZIP `unzip -t` + SHA-256 `b98da328…`、版本 `0.1.0` 与 Bundle ID、Electron `43.1.0` 与 arm64 `better_sqlite3.node`、`codesign --verify --deep --strict` 通过且反向断言 `Signature=adhoc`、空数据根首启 `schema_version=13` + Journey A `delivered`、以及用 T06 old-binary v8 fixture 证明**最终 `.app` 的 v8→v13 升级**（关键值与三个未知对象保持、`idx_*` 14 个、升级后 Journey A 仍 `delivered`）。这关闭了基线里最后一个 P0——开发态迁移与 packaged migration 现在是两份独立且可对照的证据。回归：static 22/22、typecheck、367/367 unit、迁移证据 13/13、对拍 5/5、smoke、46/46 E2E。仍是 ad-hoc 签名、未公证、未接入 updater，状态只到 `Packaged smoke pass`。[PR #10 run 30538036581](https://github.com/Eleven1111/LeanClaw/actions/runs/30538036581) 通过 `Quality` 1m38s 与 `Electron E2E` 3m59s；squash merge 为 `main@490205f` 后，[`main` run 30538427593](https://github.com/Eleven1111/LeanClaw/actions/runs/30538427593) 再次通过，`Quality` 48s、`Electron E2E` 3m51s。远端门禁不含打包，产物证据由本机 `verify:packaged` 提供。详见 [记录 BA](../../审计与交接.md) 与 [本机打包](../../本机打包.md)。执行指针移到 T09。
 
-T09 工程实现完成，等待远端 Required Checks 与合并后才关闭：2026-07-30 联网刷新 advisory（`npm audit`、`npm audit --omit=dev`、`gh api /advisories/<GHSA>` 取权威 patched 版本），并按 production / development / build-time / 不可达分层判定，结论落在新增的 [`docs/dependency-risk.md`](../../dependency-risk.md)。**生产依赖树现在零 advisory**（`npm audit --omit=dev` → `found 0 vulnerabilities`）。修掉的是 `@hono/node-server` 路径穿越（GHSA-frvp-7c67-39w9，moderate，经 MCP SDK 进入生产树）：SDK 升到 `^1.30.0`（in-range minor，非降级），因其 `^1.19.9 || ^2.0.5` 被 npm 解析到仍受影响的 `1.19.15`，再加 `overrides` 顶到 `2.0.12`；即便它本来就不可达（只用 stdio 客户端传输、漏洞只在 Windows 触发），生产依赖上的可修复项也不留。保留的是 `brace-expansion` DoS（GHSA-mh99-v99m-4gvg，high，2026-07-24 公布）：唯一修复版本是 `5.0.8`，而消费者钉 `^1.1.7`/`^2.0.1`；它整条链只在 `electron-builder` 构建期出现（`npm ls --omit=dev` 为空），glob 模式全部来自仓库自身，无外部输入面。**拒绝** npm 建议的 `electron-builder@22.14.13`（降 4 个大版本，会推翻 T08 的产物验证面），也**拒绝**把 `brace-expansion@5` 强塞进 `minimatch@3`；记录可达性、缓解与复查日期 2026-08-30。lockfile 变更后按要求全量重跑：static 22/22、typecheck、367/367 unit、迁移证据 13/13、对拍 5/5、build、smoke、46/46 E2E，并重新打包 + `verify:packaged` 10/10，新产物 DMG `27ddfb22…`、ZIP `fdefecd6…`（旧 hash 随 lockfile 失效）。
+T09 已完成并关闭：2026-07-30 联网刷新 advisory（`npm audit`、`npm audit --omit=dev`、`gh api /advisories/<GHSA>` 取权威 patched 版本），并按 production / development / build-time / 不可达分层判定，结论落在新增的 [`docs/dependency-risk.md`](../../dependency-risk.md)。**生产依赖树现在零 advisory**（`npm audit --omit=dev` → `found 0 vulnerabilities`）。修掉的是 `@hono/node-server` 路径穿越（GHSA-frvp-7c67-39w9，moderate，经 MCP SDK 进入生产树）：SDK 升到 `^1.30.0`（in-range minor，非降级），因其 `^1.19.9 || ^2.0.5` 被 npm 解析到仍受影响的 `1.19.15`，再加 `overrides` 顶到 `2.0.12`；即便它本来就不可达（只用 stdio 客户端传输、漏洞只在 Windows 触发），生产依赖上的可修复项也不留。保留的是 `brace-expansion` DoS（GHSA-mh99-v99m-4gvg，high，2026-07-24 公布）：唯一修复版本是 `5.0.8`，而消费者钉 `^1.1.7`/`^2.0.1`；它整条链只在 `electron-builder` 构建期出现（`npm ls --omit=dev` 为空），glob 模式全部来自仓库自身，无外部输入面。**拒绝** npm 建议的 `electron-builder@22.14.13`（降 4 个大版本，会推翻 T08 的产物验证面），也**拒绝**把 `brace-expansion@5` 强塞进 `minimatch@3`；记录可达性、缓解与复查日期 2026-08-30。lockfile 变更后按要求全量重跑：static 22/22、typecheck、367/367 unit、迁移证据 13/13、对拍 5/5、build、smoke、46/46 E2E，并重新打包 + `verify:packaged` 10/10，新产物 DMG `27ddfb22…`、ZIP `fdefecd6…`（旧 hash 随 lockfile 失效）。[PR #12 run 30556481206](https://github.com/Eleven1111/LeanClaw/actions/runs/30556481206) 通过 `Quality` 51s 与 `Electron E2E` 4m20s；squash merge 为 `main@2a6e3b6` 后，[`main` run 30556953956](https://github.com/Eleven1111/LeanClaw/actions/runs/30556953956) 再次通过。执行指针移到 CP1。
+
+CP1 阶段收口已完成工程裁决：验收记录见 [`docs/acceptance/leanclaw-codepilot-optimization-P1.md`](../../acceptance/leanclaw-codepilot-optimization-P1.md)，证据截止 2026-07-30T15:43:03Z，基线 `main@2a6e3b6`。本轮在该 commit 上重跑：static 22/22、typecheck、367/367 unit、迁移证据 13/13、对拍 5/5、build、46/46 E2E、**s1–s18 逐条取退出码 18/18**、全新打包 + `verify:packaged` 10/10（含 packaged 空库与旧库两条 Journey）。`engineering_acceptance: accepted`、`user_acceptance: pending`——**CP1 未获用户明确验收前不得关闭阶段，也不得开始 P2**。
 
 #### CP1：工程门禁
 
