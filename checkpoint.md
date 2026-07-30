@@ -2,7 +2,7 @@
 
 > 分支：`codex/t06-migration-evidence`（基于 `main@a1e3496`）
 >
-> 更新时间：2026-07-30
+> 更新时间：2026-07-30（T06 已关闭，执行指针 T07）
 
 ## 任务边界（本任务只做这些）
 
@@ -27,7 +27,7 @@
 | C | 可追溯 v8 old-binary fixture | done — `tests/fixtures/migrations/v8-old-binary/` |
 | D | 最小迁移框架修正 | done — `src/runtime/db.ts` |
 | E | 验证矩阵 | done — static 22/22、typecheck、unit 363/363、migration 13/13、build、smoke、E2E 45/45 |
-| F | 文档 + PR | in_progress |
+| F | 文档 + PR | done — [PR #6](https://github.com/Eleven1111/LeanClaw/pull/6) 两个 Required Checks 全绿并 squash merge 为 `main@a91c39a` |
 
 ## 恢复指引
 

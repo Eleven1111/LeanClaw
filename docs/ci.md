@@ -97,6 +97,8 @@ npm run e2e
 7. 收口文档提交触发的 [run 30456463885](https://github.com/Eleven1111/LeanClaw/actions/runs/30456463885) 中 Quality 通过，但 Automation E2E 的系统 `sqlite3` 夹具与 Runtime 并发写测试库时立即收到 `database is locked`；其余 43 条通过。该 CLI 默认 busy timeout 为 0，现为此并发夹具设置 5 秒 timeout，定向场景连续 5/5 通过；最终 PR HEAD 仍须完整重跑。
 8. 修复后的 [PR #4 最终 run 30457091843](https://github.com/Eleven1111/LeanClaw/actions/runs/30457091843) 通过：Quality 47s、Electron E2E 3m08s。PR squash merge 为 `main@1bd9722` 后，[push run 30457521961](https://github.com/Eleven1111/LeanClaw/actions/runs/30457521961) 再次通过：Quality 1m03s、Electron E2E 3m19s。
 
+9. [T06 PR #6 run 30517200723](https://github.com/Eleven1111/LeanClaw/actions/runs/30517200723) 通过：Quality 55s（含新增 `Migration evidence` 步骤，日志为「迁移证据台账：13/13 PASS」）、Electron E2E 4m19s（45 条）。squash merge 为 `main@a91c39a` 后，[`main` run 30517494478](https://github.com/Eleven1111/LeanClaw/actions/runs/30517494478) 再次通过：Quality 1m05s、Electron E2E 3m38s。
+
 T04 的代码、真实 Runner、失败关闭和平台级合并阻断证据均已完整。
 
 本轮还在隔离副本临时注入 `test.only`，`CI=true npx playwright test --list` 按预期以退出码 1 拒绝执行；移除临时文件后恢复识别 29 个文件、43 条测试。这证明本地 fail-closed 配置有效，但不证明 GitHub 分支保护会拦截。
