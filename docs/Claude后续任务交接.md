@@ -6,9 +6,9 @@
 >
 > 当前仓库：[`Eleven1111/LeanClaw`](https://github.com/Eleven1111/LeanClaw)
 >
-> 当前本地基线：`main@a91c39a`
+> 当前本地基线：`main@16809b9`
 >
-> 当前执行指针：`P1 / T07`
+> 当前执行指针：`P1 / T08`
 >
 > 交接原则：严格按 active plan 一个任务一个任务执行；工程完成、远端门禁和用户验收分别判定
 
@@ -34,6 +34,7 @@
 - P1/T04 远端 CI、Required Checks 和失败阻断证明已完成；
 - P1/T05 自动测试与真实用户数据强隔离已完成；
 - P1/T06 历史数据库迁移证据已完成并合并（`main@a91c39a`，[PR #6](https://github.com/Eleven1111/LeanClaw/pull/6) 两个 Required Checks 全绿）；
+- P1/T07 已知故障路径补洞已完成并合并（`main@16809b9`，[PR #8](https://github.com/Eleven1111/LeanClaw/pull/8) 两个 Required Checks 全绿）；
 - `main` 受到 Branch Protection 保护：
   - `Quality` 和 `Electron E2E` 都是 Required Check；
   - 管理员同样受约束；
@@ -49,12 +50,13 @@
 最近确认的本地基线：
 
 - static：22/22；
-- unit：363/363；
+- unit：367/367；
 - 迁移证据（真实 SQLite）：13/13；
+- 双路径对拍（真实 SQLite）：5/5；
 - typecheck：PASS；
 - production build：PASS；
 - Runtime smoke：PASS；
-- Electron E2E：45/45；
+- Electron E2E：46/46；
 - 当前 Schema：v13。
 
 这些数字是历史证据，不是后续分支自动继承的结论。任何代码变更后必须重新执行并记录真实输出。
@@ -63,10 +65,9 @@
 
 P1 还剩：
 
-1. T07 已知故障路径补洞；
-2. T08 最终打包产物验证；
-3. T09 依赖风险刷新与决策；
-4. CP1 阶段工程收口和用户验收。
+1. T08 最终打包产物验证；
+2. T09 依赖风险刷新与决策；
+3. CP1 阶段工程收口和用户验收。
 
 P1 未通过 CP1 用户验收前，不得开始 P2 业务实现。
 
@@ -342,7 +343,7 @@ T06 是 P1 内部任务，不需要单独把 CP1 标记为用户验收通过。
 
 ## 5. T06 之后的 P1 任务
 
-### 5.1 T07 已知故障路径补洞
+### 5.1 T07 已知故障路径补洞（已于 2026-07-30 完成并合并，保留为实施记录）
 
 依赖：T05；执行顺序上等待 T06 完整关闭。
 

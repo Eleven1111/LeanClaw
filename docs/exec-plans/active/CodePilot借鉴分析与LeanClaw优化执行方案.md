@@ -4,14 +4,14 @@ status: active
 created_at: 2026-07-29
 updated_at: 2026-07-30
 current_phase: P1
-current_task: T07
+current_task: T08
 engineering_status: in_progress
 user_approval: approved
 ---
 
 # CodePilot 借鉴分析与 LeanClaw 优化提升执行方案
 
-> 文档状态：P0 已于 2026-07-29 通过用户验收；P1 / T04–T06 已完成并关闭，执行指针移到 T07
+> 文档状态：P0 已于 2026-07-29 通过用户验收；P1 / T04–T07 已完成并关闭，执行指针移到 T08
 >
 > 创建日期：2026-07-29
 >
@@ -311,7 +311,7 @@ T05 已完成并关闭：Vitest、Playwright 和 Runtime smoke 会在 import/启
 
 T06 已完成并关闭：新增 `npm run migration:evidence`（Node 编排 + `ELECTRON_RUN_AS_NODE` 真实 SQLite），13 个场景覆盖空库→v13、v12→v13、old-binary v8→v13、新库与升级库结构指纹对拍、3 个未知对象保持、连续三次启动幂等、v14 库拒绝、版本台账多行/文本/负数/小数拒绝、0 行台账 bootstrap、固定注入点整体回滚与回滚后向前恢复。fixture 由锚点提交 `15831e5` 自己的 `initDb()` 创建（`source_kind: synthetic-old-binary`），生成脚本、manifest、checksum 与语义指纹可追溯，全程未接触真实 `~/.leanclaw`。实现侧最小修正：`pendingMigrations()` 对更高版本抛 `schema-too-new`、`readSchemaVersion()` 强制单行非负整数、新增 `applyMigrations()` 迁移应用边界并把 bootstrap 纳入同一事务、`initDb()` 失败不发布半成品连接。本地 static 22/22、typecheck、363/363 unit、迁移证据 13/13、build、Runtime smoke 与 45/45 Electron E2E 通过。开发态迁移不冒充 packaged migration，最终 `.app` 旧库升级仍在 T08。[PR #6 run 30517200723](https://github.com/Eleven1111/LeanClaw/actions/runs/30517200723) 通过 `Quality` 55s 与 `Electron E2E` 4m19s；squash merge 为 `main@a91c39a` 后，[`main` run 30517494478](https://github.com/Eleven1111/LeanClaw/actions/runs/30517494478) 再次通过，`Quality` 1m05s、`Electron E2E` 3m38s，两轮日志都含「迁移证据台账：13/13 PASS」与 45 条 E2E。详见 [Migration 护栏](../../guardrails/Migration.md) 与 [记录 AY](../../审计与交接.md)。执行指针移到 T07。
 
-T07 工程实现完成，等待远端 Required Checks 与合并后才关闭：新增 `npm run parity:evidence`（与迁移证据共用 Electron 证据启动器）对 `TaskSummaryView` 的两条派生路径做真实 SQLite 逐字节对拍，首次运行即发现 `listTaskSummaries()` 的 `lastDoneLabel` 未脱敏、会把 Task 私有绝对路径送进 Renderer，已修复为与完整视图共享同一脱敏规则。Automation 在真实 Runtime 内用可移除的 `BEFORE INSERT ... RAISE(ABORT)` 触发器注入 DB 故障：事务整体回滚、无 Task 落地、无孤儿事件、Need You 为空、Runtime 存活，移除故障后只创建一个 Task。同时发现失败在 UI 上表现为假成功（卡片只显示下次运行与上一个 Task），新增派生字段 `lastTriggerFailed` 与卡片「触发失败 · 未创建任务，原因见诊断」，仅由既有两列推导，不新增 Schema。「认领先推进、失败不回滚 `next_run_at`」经裁决**保持**并记录为接受风险：回退会把坏计划变成每 tick 热重试。队列一致性以摘要/明细的 `status` 与 `queuePosition` 相等、`stopTask` 后队列清空且状态收敛为断言。本地 static 22/22、typecheck、367/367 unit、迁移证据 13/13、对拍 5/5、build、Runtime smoke 与 46/46 Electron E2E 通过。详见 [Privacy 护栏](../../guardrails/Privacy.md) 与 [记录 AZ](../../审计与交接.md)。
+T07 已完成并关闭：新增 `npm run parity:evidence`（与迁移证据共用 Electron 证据启动器）对 `TaskSummaryView` 的两条派生路径做真实 SQLite 逐字节对拍，首次运行即发现 `listTaskSummaries()` 的 `lastDoneLabel` 未脱敏、会把 Task 私有绝对路径送进 Renderer，已修复为与完整视图共享同一脱敏规则。Automation 在真实 Runtime 内用可移除的 `BEFORE INSERT ... RAISE(ABORT)` 触发器注入 DB 故障：事务整体回滚、无 Task 落地、无孤儿事件、Need You 为空、Runtime 存活，移除故障后只创建一个 Task。同时发现失败在 UI 上表现为假成功（卡片只显示下次运行与上一个 Task），新增派生字段 `lastTriggerFailed` 与卡片「触发失败 · 未创建任务，原因见诊断」，仅由既有两列推导，不新增 Schema。「认领先推进、失败不回滚 `next_run_at`」经裁决**保持**并记录为接受风险：回退会把坏计划变成每 tick 热重试。队列一致性以摘要/明细的 `status` 与 `queuePosition` 相等、`stopTask` 后队列清空且状态收敛为断言。本地 static 22/22、typecheck、367/367 unit、迁移证据 13/13、对拍 5/5、build、Runtime smoke 与 46/46 Electron E2E 通过。[PR #8 run 30523391877](https://github.com/Eleven1111/LeanClaw/actions/runs/30523391877) 通过 `Quality` 1m17s 与 `Electron E2E` 4m02s；squash merge 为 `main@16809b9` 后，[`main` run 30523728447](https://github.com/Eleven1111/LeanClaw/actions/runs/30523728447) 再次通过，`Quality` 1m08s、`Electron E2E` 3m01s，两轮日志都含「迁移证据台账：13/13 PASS」「双路径对拍台账：5/5 PASS」与 46 条 E2E。详见 [Privacy 护栏](../../guardrails/Privacy.md) 与 [记录 AZ](../../审计与交接.md)。执行指针移到 T08。
 
 #### CP1：工程门禁
 
