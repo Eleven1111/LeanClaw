@@ -1,8 +1,8 @@
-# checkpoint — P1 / T06 历史数据库迁移证据
+# checkpoint — P1 / T07 已知故障路径补洞
 
-> 分支：`codex/t06-migration-evidence`（基于 `main@a1e3496`）
+> 分支：`codex/t07-fault-path-coverage`（基于 `main@7b62f68`）
 >
-> 更新时间：2026-07-30（T06 已关闭，执行指针 T07）
+> 更新时间：2026-07-30（T06 已关闭并合并；T07 工程完成，待远端门禁）
 
 ## 任务边界（本任务只做这些）
 
@@ -32,3 +32,16 @@
 ## 恢复指引
 
 `npm run migration:evidence` 是 T06 的真实 SQLite 证据入口；`tests/e2e/t06-fixture-migration.spec.ts` 是 fixture → v13 的开发态 Journey 证据。
+
+## T07 阶段
+
+| 阶段 | 内容 | 状态 |
+|---|---|---|
+| A | 双路径对拍 harness（RED：`lastDoneLabel` 未脱敏） | done |
+| B | 修复列表投影脱敏 | done — `src/runtime/views.ts` |
+| C | Automation 真实 Runtime DB 故障注入 E2E | done — `tests/e2e/t07-automation-fault.spec.ts` |
+| D | 失败可见性（`lastTriggerFailed` + 卡片文案） | done — `src/shared/schedule.ts`、`api.ts`、`Automations.tsx` |
+| E | 验证矩阵 | done — static 22/22、unit 367/367、migration 13/13、parity 5/5、E2E 46/46 |
+| F | 文档 + PR | in_progress |
+
+T07 的裁决：「认领先推进、失败不回滚 `next_run_at`」保持不变（回退会导致热重试），改为在 UI 上显式报告触发失败。

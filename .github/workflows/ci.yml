@@ -55,6 +55,9 @@ jobs:
       - name: Migration evidence
         run: npm run migration:evidence
 
+      - name: Summary parity evidence
+        run: npm run parity:evidence
+
       - name: Production build
         run: npm run build
 

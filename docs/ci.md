@@ -24,8 +24,8 @@ Checkout 关闭 `persist-credentials`；GitHub 官方 Action 使用审核过的�
 
 | Job / Check | Runner | 上限 | 命令 | 证明范围 |
 |---|---|---:|---|---|
-| `Quality` | `macos-15` arm64 | 20 分钟 | 锁文件安装、`npm run check:static`、`npm run typecheck`、`npm test`、`npm run migration:evidence`、`npm run build` | 锁文件安装、治理契约、类型、单元测试、真实 SQLite 迁移证据、开发态 production build |
-| `Electron E2E` | `macos-15` arm64 | 30 分钟 | 锁文件安装、`npm run build`、`npm run e2e` | 开发态 Electron 的 45 条 E2E；依赖 Quality 成功 |
+| `Quality` | `macos-15` arm64 | 20 分钟 | 锁文件安装、`npm run check:static`、`npm run typecheck`、`npm test`、`npm run migration:evidence`、`npm run parity:evidence`、`npm run build` | 锁文件安装、治理契约、类型、单元测试、真实 SQLite 迁移证据与投影对拍、开发态 production build |
+| `Electron E2E` | `macos-15` arm64 | 30 分钟 | 锁文件安装、`npm run build`、`npm run e2e` | 开发态 Electron 的 46 条 E2E；依赖 Quality 成功 |
 
 实际 check-run 名称已核对为 `Quality` 和 `Electron E2E`，二者均已设为 `main` 的严格 Required Status Check。Branch Protection 同时启用管理员约束、线性历史和会话解决要求，并禁止强推与删除。
 
@@ -76,6 +76,7 @@ npm run check:static
 npm run typecheck
 npm test
 npm run migration:evidence
+npm run parity:evidence
 npm run build
 npm run e2e
 ```
@@ -115,3 +116,4 @@ T04 的代码、真实 Runner、失败关闭和平台级合并阻断证据均已
 | 2026-07-29 | 仓库保持 private，不为启用免费 Branch Protection 自动改为 public | 可见性是用户数据边界；应由用户明确选择公开或升级账号。 |
 | 2026-07-29 | 用户手工改为 public 后启用严格 `main` 保护 | Required Checks 现在具有真实合并阻断力；管理员也不能绕过。 |
 | 2026-07-30 | 把 `npm run migration:evidence` 加入 Quality 而不是新建 job | 它在 `ELECTRON_RUN_AS_NODE` 下运行、不需要 GUI，也不依赖 production build，属于与单测同层的确定性门禁。 |
+| 2026-07-30 | `npm run parity:evidence` 与迁移证据并列进 Quality | 两者共用同一个 Electron 证据启动器，都是不需要 GUI 的确定性门禁；投影对拍失败必须和单测失败一样阻断合并。 |

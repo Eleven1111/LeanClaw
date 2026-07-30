@@ -10,7 +10,7 @@ const { join } = require('path')
 
 const bundlePath = required('LEANCLAW_MIGRATION_DB_BUNDLE')
 const isolationPath = required('LEANCLAW_MIGRATION_ISOLATION_BUNDLE')
-const scratch = required('LEANCLAW_MIGRATION_SCRATCH')
+const scratch = required('LEANCLAW_EVIDENCE_SCRATCH')
 const fixturePath = required('LEANCLAW_MIGRATION_FIXTURE')
 
 function required(name) {

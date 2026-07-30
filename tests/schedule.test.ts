@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { nextOccurrence, validateScheduleInput } from '../src/shared/schedule'
+import {
+  lastTriggerProducedNoTask,
+  nextOccurrence,
+  validateScheduleInput
+} from '../src/shared/schedule'
 import { normalizeScheduleHistoryLimit } from '../src/runtime/automations'
 
 describe('nextOccurrence', () => {
@@ -49,5 +53,50 @@ describe('normalizeScheduleHistoryLimit', () => {
     expect(() => normalizeScheduleHistoryLimit(1.5)).toThrow(/1–20/)
     expect(() => normalizeScheduleHistoryLimit(0)).toThrow(/1–20/)
     expect(() => normalizeScheduleHistoryLimit(21)).toThrow(/1–20/)
+  })
+})
+
+describe('lastTriggerProducedNoTask（认领后未产生 Task 的可见性）', () => {
+  it('认领时间晚于最新 Task 创建时间说明这次到期触发没有产生 Task', () => {
+    expect(
+      lastTriggerProducedNoTask({
+        lastTriggeredAt: '2026-07-30T08:00:00.000Z',
+        lastTaskCreatedAt: '2026-07-29T08:00:00.100Z'
+      })
+    ).toBe(true)
+  })
+
+  it('从未产生过 Task 但已经被认领同样算失败', () => {
+    expect(
+      lastTriggerProducedNoTask({
+        lastTriggeredAt: '2026-07-30T08:00:00.000Z',
+        lastTaskCreatedAt: null
+      })
+    ).toBe(true)
+  })
+
+  it('Task 创建时间不早于认领时间时算成功，同毫秒不判失败', () => {
+    expect(
+      lastTriggerProducedNoTask({
+        lastTriggeredAt: '2026-07-30T08:00:00.000Z',
+        lastTaskCreatedAt: '2026-07-30T08:00:00.000Z'
+      })
+    ).toBe(false)
+    expect(
+      lastTriggerProducedNoTask({
+        lastTriggeredAt: '2026-07-30T08:00:00.000Z',
+        lastTaskCreatedAt: '2026-07-30T08:00:01.000Z'
+      })
+    ).toBe(false)
+  })
+
+  it('从未被定时认领过（含仅手动触发）不算失败', () => {
+    expect(lastTriggerProducedNoTask({ lastTriggeredAt: null, lastTaskCreatedAt: null })).toBe(false)
+    expect(
+      lastTriggerProducedNoTask({
+        lastTriggeredAt: null,
+        lastTaskCreatedAt: '2026-07-30T08:00:00.000Z'
+      })
+    ).toBe(false)
   })
 })
