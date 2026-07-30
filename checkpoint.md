@@ -2,7 +2,7 @@
 
 > 分支：`codex/t07-fault-path-coverage`（基于 `main@7b62f68`）
 >
-> 更新时间：2026-07-30（T06–T08 已关闭并合并；T09 工程完成，待远端门禁）
+> 更新时间：2026-07-30（T04–T09 全部关闭；CP1 工程裁决 accepted，等待用户验收）
 
 ## 任务边界（本任务只做这些）
 
@@ -67,4 +67,13 @@ T07 的裁决：「认领先推进、失败不回滚 `next_run_at`」保持不�
 | C | 修生产树唯一项（SDK ^1.30.0 + hono override） | done — `npm audit --omit=dev` 为 0 |
 | D | 保留 brace-expansion 并记录缓解与复查日期 2026-08-30 | done |
 | E | lockfile 变更后全量重跑 + 重新打包 | done — 新 DMG `27ddfb22…` / ZIP `fdefecd6…` |
-| F | 文档 + PR | in_progress |
+| F | 文档 + PR | done — [PR #12](https://github.com/Eleven1111/LeanClaw/pull/12) 全绿并 squash merge 为 `main@2a6e3b6` |
+
+## CP1 阶段收口
+
+工程裁决 `accepted`，用户裁决 `pending`。验收记录：`docs/acceptance/leanclaw-codepilot-optimization-P1.md`。
+
+在 `main@2a6e3b6` 上重跑：static 22/22、typecheck、unit 367/367、迁移证据 13/13、对拍 5/5、build、E2E 46/46、s1–s18 逐条 18/18、全新打包 + verify:packaged 10/10。
+产物：DMG `e54a751e…`、ZIP `c7351451…`。
+
+**用户未明确回复"验收通过"前，不得关闭 CP1，也不得开始 P2。**

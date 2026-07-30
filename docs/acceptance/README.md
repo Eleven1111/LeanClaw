@@ -15,3 +15,4 @@
 | Plan | 阶段 | 工程状态 | 用户状态 | 记录 |
 |---|---|---|---|---|
 | `leanclaw-codepilot-optimization` | P0 / CP0 | Accepted | Accepted | [P0 验收记录](leanclaw-codepilot-optimization-P0.md) |
+| `leanclaw-codepilot-optimization` | P1 / CP1 | Accepted | **Pending** | [P1 验收记录](leanclaw-codepilot-optimization-P1.md) |

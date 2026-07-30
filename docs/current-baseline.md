@@ -4,7 +4,7 @@
 >
 > 刷新日期：2026-07-30
 >
-> 已验证代码基线：`codex/t09-dependency-risk-refresh`（基于 `main@696331b`）；远端门禁证据见 T09 PR
+> 已验证代码基线：`main@2a6e3b6`（CP1 证据截止 2026-07-30T15:43:03Z）
 >
 > 维护规则：代码、Schema、测试门禁、打包方式或已知边界变化时，必须在同一任务内刷新本文
 
@@ -76,16 +76,17 @@
 | Runtime smoke | `npm run smoke` | 独立临时根内 `delivered`，退出后无残留 |
 | Electron E2E | `npm run e2e` | 受控 GUI 权限下 **46/46 PASS** |
 | 最终产物验证 | `npm run dist:mac` + `npm run verify:packaged` | **10/10 OK**（含 packaged migration） |
+| 逐条冒烟 | s1–s18，逐条读取各自退出码 | **18/18 PASS** |
 
 `npm ci` 干净安装预演是 2026-07-29 T05 轮的证据（Node 23.6.0 arm64），本轮未重跑；依赖未变更。
 
-### 4.2 最终产物（2026-07-30 依赖变更后重新打包）
+### 4.2 最终产物（2026-07-30 CP1 重新打包）
 
 | 项目 | 事实 |
 |---|---|
 | 产物 | `release/LeanClaw-0.1.0-arm64.dmg`、`release/LeanClaw-0.1.0-arm64.zip`（本轮重新生成，脚本拒绝旧包） |
-| DMG SHA-256 | `27ddfb227ea0b30be88e5a0a70a59472be2d39fb2beed2a8ad5d31980403951c` |
-| ZIP SHA-256 | `fdefecd6c4bdfef56fa14a3fc65bc50c9d4bbc24611ee620b0688219b117860f` |
+| DMG SHA-256 | `e54a751e5005d926e4e4f4246f32778dcf27031e30fd2d1002e07388ca0b7cac` |
+| ZIP SHA-256 | `c7351451d3f36fe2853bed86ad981600fd10c6f314d45a798b89e0b9120ddcd9` |
 | 版本 / Bundle ID | `0.1.0` / `com.leanclaw.desktop` |
 | Electron / native | `43.1.0` / `better_sqlite3.node` arm64（已 unpack） |
 | 签名 | `codesign --verify --deep --strict` 通过，`Signature=adhoc`，未公证 |
@@ -93,6 +94,8 @@
 | packaged migration | T06 old-binary v8 fixture → v13，关键值与未知对象保持，升级后 Journey A `delivered` |
 
 状态是 `Packaged smoke pass`，**不是** `Release ready` 或 `Shipped`。
+
+macOS 打包不是逐字节可复现的：同一 commit 重新 `dist:mac` 会得到不同 hash。产物 hash 只标识"某一次生成的那一份"，证明代码没变要用 commit，不要用产物 hash。
 
 ### 4.3 最近一次仓库完整证据
 
